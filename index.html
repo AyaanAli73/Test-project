@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supernova Particle Engine</title>
+    <title>The Hive - Swarm Intelligence</title>
     
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -13,489 +13,367 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
-    <!-- Tailwind CSS -->
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background-color: #000000; 
-            font-family: 'Segoe UI', sans-serif; 
-        }
-
-        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
+        body { margin: 0; overflow: hidden; background-color: #000; }
         
-        #hud-layer {
+        #ui-layer {
             position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 10;
+            top: 20px; left: 20px;
             pointer-events: none;
+            z-index: 10;
+            font-family: 'Courier New', Courier, monospace;
         }
 
-        .hud-panel {
-            background: rgba(10, 10, 15, 0.7);
-            border-left: 3px solid #00f0ff;
-            padding: 15px;
-            border-radius: 0 10px 10px 0;
-            backdrop-filter: blur(5px);
+        .hud-text {
+            color: #00ff88;
+            text-shadow: 0 0 5px #00ff88;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            margin-bottom: 2px;
+            display: inline-block;
         }
 
-        .status-text {
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-
-        #energy-bar-container {
-            width: 200px;
-            height: 6px;
-            background: #333;
-            margin-top: 10px;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        #energy-bar {
-            width: 0%;
-            height: 100%;
-            background: linear-gradient(90deg, #ff0000, #ffaa00);
-            transition: width 0.1s;
-        }
-
-        #input-video { 
-            position: absolute; 
-            bottom: 20px; 
-            right: 20px; 
-            width: 160px; 
-            height: 120px; 
-            z-index: 20; 
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 8px;
-            transform: scaleX(-1); 
-            display: none;
-        }
-
-        #loading {
+        #loader {
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            color: #00f0ff;
-            text-align: center;
+            color: #00ff88;
+            background: black;
+            border: 1px solid #00ff88;
+            padding: 20px;
             z-index: 50;
-            background: rgba(0,0,0,0.9);
-            padding: 40px;
-            border: 1px solid #00f0ff;
-            box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
-            border-radius: 10px;
+            text-align: center;
+        }
+
+        /* Mirror input video */
+        #input-video {
+            position: absolute;
+            bottom: 20px; right: 20px;
+            width: 150px; height: 110px;
+            transform: scaleX(-1);
+            opacity: 0.3;
+            z-index: 20;
+            border: 1px solid #333;
         }
     </style>
 </head>
 <body>
 
-    <div id="hud-layer">
-        <div class="hud-panel">
-            <h1 class="text-2xl font-bold text-white mb-1 shadow-lg">SUPERNOVA CORE</h1>
-            <div class="text-xs text-gray-400 mb-4">PARTICLE SIMULATION // v2.4</div>
-            
-            <div class="space-y-2 text-sm text-gray-200">
-                <div id="instr-move" class="flex items-center"><span class="w-6">✋</span> <span>MOVE & ROTATE</span></div>
-                <div id="instr-charge" class="flex items-center"><span class="w-6">✊</span> <span>CHARGE CORE</span></div>
-                <div id="instr-boom" class="flex items-center text-yellow-400 font-bold hidden"><span class="w-6">💥</span> <span>RELEASE TO DETONATE</span></div>
-            </div>
-
-            <div class="mt-4">
-                <div class="text-xs text-gray-500 font-mono">ENERGY LEVEL</div>
-                <div id="energy-bar-container">
-                    <div id="energy-bar"></div>
-                </div>
-            </div>
-            
-            <div class="mt-2 text-xs font-mono text-cyan-400" id="debug-state">STATUS: SYSTEM IDLE</div>
-        </div>
+    <div id="ui-layer">
+        <h1 class="text-2xl font-bold text-white mb-4">THE HIVE</h1>
+        <div><span class="hud-text">✋ OPEN: ORBIT COMMAND</span></div>
+        <div><span class="hud-text">✊ FIST: GRAVITY WELL</span></div>
+        <div><span class="hud-text">✌️ VICTORY: TIME FREEZE</span></div>
+        <div class="mt-4 text-xs text-gray-400">AGENTS: 2000 | AI: AUTONOMOUS</div>
+        <div class="mt-1 text-xs text-yellow-400" id="status">STATUS: SEARCHING...</div>
     </div>
 
-    <div id="loading">
-        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-400 mx-auto mb-4"></div>
-        <div class="font-bold tracking-widest text-xl">BOOTING SYSTEM</div>
-        <div class="text-xs text-gray-400 mt-2">Connecting Neural Interface...</div>
+    <div id="loader">
+        <div class="animate-pulse font-bold tracking-widest">AWAKENING SWARM...</div>
     </div>
 
     <video id="input-video" playsinline></video>
-    <div id="canvas-container"></div>
 
     <script>
-        // --- SETTINGS ---
-        const CONFIG = {
-            count: 20000,           // High particle count
-            radius: 30,             // Base sphere size
-            explosionForce: 6.5,    // Speed of explosion
-            returnSpeed: 0.025,     // Speed of reforming
-            idleColor: new THREE.Color(0x00f0ff), // Cyan
-            chargeColor: new THREE.Color(0xff2200), // Red
-            explodeColor: new THREE.Color(0xffffff) // White
-        };
-
-        // --- STATE MACHINE ---
+        // --- CONFIGURATION ---
+        const BOID_COUNT = 2000;
+        const MAX_SPEED = 1.2;
+        const MAX_FORCE = 0.03;
+        const NEIGHBOR_DIST = 40;
+        
+        // --- STATE ---
         const state = {
-            mode: 'IDLE', // IDLE, CHARGING, EXPLODING, REFORMING
             handDetected: false,
-            handPos: new THREE.Vector3(0,0,0), // Normalized screen pos
-            rotationTarget: { x: 0, y: 0 },
-            chargeLevel: 0, // 0 to 1
-            explosionTime: 0
+            handPos: new THREE.Vector3(0,0,0),
+            mode: 'IDLE', // IDLE, ORBIT, GRAVITY, FREEZE
+            shockwave: 0
         };
 
-        // --- THREE.JS ---
-        let scene, camera, renderer, particles;
-        let coreLight;
+        // --- THREE JS ---
+        let scene, camera, renderer;
+        let mesh; // The InstancedMesh
+        const dummy = new THREE.Object3D(); // Helper for matrix calculations
+
+        // Boid Data
+        const positions = [];
+        const velocities = [];
+        const accelerations = [];
+        const colors = [];
 
         function init() {
-            const container = document.getElementById('canvas-container');
-            
             scene = new THREE.Scene();
-            // No Fog, purely black background for contrast
-            scene.background = new THREE.Color(0x000000);
-
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 100;
-
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            container.appendChild(renderer.domElement);
-
-            // Dynamic Point Light for the "Core"
-            coreLight = new THREE.PointLight(0x00f0ff, 1, 200);
-            coreLight.position.set(0,0,0);
-            scene.add(coreLight);
-
-            createParticles();
-            animate();
-
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            });
-        }
-
-        function createParticles() {
-            const geometry = new THREE.BufferGeometry();
-            const positions = [];
-            const initialPos = []; // To remember sphere shape
-            const colors = [];
-            const sizes = [];
-            const velocities = []; // Explosion direction
-
-            const colorObj = new THREE.Color();
-
-            for(let i=0; i<CONFIG.count; i++) {
-                // Sphere math
-                const phi = Math.acos(-1 + (2 * i) / CONFIG.count);
-                const theta = Math.sqrt(CONFIG.count * Math.PI) * phi;
-
-                const x = CONFIG.radius * Math.cos(theta) * Math.sin(phi);
-                const y = CONFIG.radius * Math.sin(theta) * Math.sin(phi);
-                const z = CONFIG.radius * Math.cos(phi);
-
-                positions.push(x, y, z);
-                initialPos.push(x, y, z);
-
-                // Velocity is normalized vector from center (for explosion)
-                const v = new THREE.Vector3(x,y,z).normalize();
-                velocities.push(v.x, v.y, v.z);
-
-                // Initial Color (Cyan variance)
-                colorObj.setHSL(0.5 + Math.random()*0.1, 0.8, 0.5);
-                colors.push(colorObj.r, colorObj.g, colorObj.b);
-
-                // Random sizes
-                sizes.push(Math.random() * 0.8 + 0.2);
-            }
-
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-            geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes, 1));
+            // Background is black, but we use autoClearColor = false for trails
             
-            geometry.userData = {
-                initialPos: new Float32Array(initialPos),
-                velocities: new Float32Array(velocities)
-            };
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
+            camera.position.z = 150;
 
-            // Shader Material for Glowy Dots
-            const material = new THREE.PointsMaterial({
-                size: 0.6,
-                vertexColors: true,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false,
-                transparent: true,
-                opacity: 0.9
+            // Important: preserveDrawingBuffer allows the trail effect
+            renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.autoClearColor = false; // Don't clear screen fully
+            document.body.appendChild(renderer.domElement);
+
+            // --- GEOMETRY: Tetrahedrons (Look like little ships) ---
+            const geometry = new THREE.TetrahedronGeometry(0.8);
+            const material = new THREE.MeshBasicMaterial({ 
+                color: 0xffffff,
+                wireframe: false
             });
 
-            particles = new THREE.Points(geometry, material);
-            scene.add(particles);
+            mesh = new THREE.InstancedMesh(geometry, material, BOID_COUNT);
+            mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); // We update every frame
+            scene.add(mesh);
+
+            // Init Boids
+            for (let i = 0; i < BOID_COUNT; i++) {
+                // Random position in sphere
+                const pos = new THREE.Vector3(
+                    (Math.random()-0.5) * 100,
+                    (Math.random()-0.5) * 100,
+                    (Math.random()-0.5) * 100
+                );
+                positions.push(pos);
+                
+                // Random velocity
+                const vel = new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize();
+                velocities.push(vel);
+                
+                accelerations.push(new THREE.Vector3());
+
+                // Set initial color (Cyber Green/Blue)
+                const c = new THREE.Color();
+                c.setHSL(0.3 + Math.random()*0.1, 1.0, 0.5);
+                mesh.setColorAt(i, c);
+            }
+            mesh.instanceColor.needsUpdate = true;
+
+            animate();
+            window.addEventListener('resize', onWindowResize, false);
         }
 
-        // --- ANIMATION ENGINE ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- BOID LOGIC ENGINE ---
+        function updateBoids() {
+            const target = new THREE.Vector3().copy(state.handPos);
+            // Map hand pos (-1 to 1) to World Scale
+            target.x *= 60;
+            target.y *= 45;
+            target.z = 0;
+
+            const tempVec = new THREE.Vector3();
+
+            for (let i = 0; i < BOID_COUNT; i++) {
+                const pos = positions[i];
+                const vel = velocities[i];
+                const acc = accelerations[i];
+
+                // 1. BEHAVIOR SELECTION
+                if (state.mode === 'FREEZE') {
+                    // Do nothing, velocity frozen
+                    vel.multiplyScalar(0.9); // Slow to stop
+                } 
+                else if (state.mode === 'GRAVITY') {
+                    // Strong Pull to center (Black Hole)
+                    tempVec.subVectors(target, pos);
+                    const d = tempVec.length();
+                    tempVec.normalize();
+                    tempVec.multiplyScalar(1.0); // Strong pull
+                    acc.add(tempVec);
+                    
+                    // Add spiral
+                    const spiral = new THREE.Vector3(-tempVec.y, tempVec.x, 0).multiplyScalar(0.5);
+                    acc.add(spiral);
+                } 
+                else if (state.mode === 'ORBIT') {
+                    // Orbit Logic
+                    tempVec.subVectors(target, pos);
+                    const d = tempVec.length();
+                    
+                    // Pull towards hand
+                    if (d > 20) {
+                        tempVec.normalize().multiplyScalar(0.05);
+                        acc.add(tempVec);
+                    }
+                    
+                    // Rotate around hand (Tangent force)
+                    const orbitForce = new THREE.Vector3(-vel.y, vel.x, vel.z).normalize().multiplyScalar(0.05);
+                    acc.add(orbitForce);
+                    
+                    // Noise/Wander
+                    if(Math.random() > 0.95) {
+                        acc.x += (Math.random()-0.5) * 0.5;
+                        acc.y += (Math.random()-0.5) * 0.5;
+                        acc.z += (Math.random()-0.5) * 0.5;
+                    }
+                } 
+                else { // IDLE (Shockwave or Wander)
+                    if (state.shockwave > 0) {
+                        // Explode outward
+                        tempVec.subVectors(pos, target).normalize().multiplyScalar(state.shockwave);
+                        acc.add(tempVec);
+                    } else {
+                        // Gentle return to center
+                        tempVec.set(0,0,0).sub(pos).normalize().multiplyScalar(0.01);
+                        acc.add(tempVec);
+                    }
+                }
+
+                // 2. PHYSICS UPDATE
+                vel.add(acc);
+                
+                // Speed Limit
+                const speed = vel.length();
+                if (speed > MAX_SPEED) {
+                    vel.normalize().multiplyScalar(MAX_SPEED);
+                }
+                
+                pos.add(vel);
+                acc.set(0, 0, 0); // Reset accel
+
+                // 3. VISUAL UPDATE (InstancedMesh)
+                dummy.position.copy(pos);
+                
+                // "Look At" Velocity (The boid faces where it flies)
+                // We create a target point slightly ahead
+                tempVec.copy(pos).add(vel);
+                dummy.lookAt(tempVec);
+                dummy.updateMatrix();
+                
+                mesh.setMatrixAt(i, dummy.matrix);
+
+                // 4. COLOR DYNAMICS
+                // High speed = White/Yellow, Low speed = Green/Blue
+                const speedRatio = speed / MAX_SPEED;
+                const c = new THREE.Color();
+                if (state.mode === 'GRAVITY') {
+                    // Red/Orange/Purple
+                    c.setHSL(0.0 + speedRatio*0.1, 1.0, 0.5); 
+                } else {
+                    // Cyan/Green
+                    c.setHSL(0.4 - speedRatio*0.2, 1.0, 0.5 + speedRatio*0.5);
+                }
+                mesh.setColorAt(i, c);
+            }
+            
+            mesh.instanceMatrix.needsUpdate = true;
+            mesh.instanceColor.needsUpdate = true;
+            
+            // Decay shockwave
+            if(state.shockwave > 0) state.shockwave *= 0.9;
+        }
+
+        // --- ANIMATION ---
         function animate() {
             requestAnimationFrame(animate);
 
-            const time = Date.now() * 0.001;
-            const positions = particles.geometry.attributes.position.array;
-            const colors = particles.geometry.attributes.color.array;
-            const initial = particles.geometry.userData.initialPos;
-            const vels = particles.geometry.userData.velocities;
+            updateBoids();
 
-            // -- LOGIC PER MODE --
-
-            // 1. CHARGING (FIST)
-            if (state.mode === 'CHARGING') {
-                state.chargeLevel = Math.min(state.chargeLevel + 0.02, 1.0);
-                
-                // Target: Hand Position
-                const tx = state.handPos.x * 50;
-                const ty = state.handPos.y * 30;
-
-                // Color Target: Red
-                const rR = CONFIG.chargeColor.r;
-                const rG = CONFIG.chargeColor.g;
-                const rB = CONFIG.chargeColor.b;
-
-                for(let i=0; i<CONFIG.count; i++) {
-                    const i3 = i*3;
-                    
-                    // Suck in
-                    positions[i3] += (tx - positions[i3]) * 0.15;
-                    positions[i3+1] += (ty - positions[i3+1]) * 0.15;
-                    positions[i3+2] += (0 - positions[i3+2]) * 0.15;
-
-                    // Vibrate
-                    const vib = 2.0 * state.chargeLevel;
-                    positions[i3] += (Math.random()-0.5) * vib;
-                    positions[i3+1] += (Math.random()-0.5) * vib;
-                    positions[i3+2] += (Math.random()-0.5) * vib;
-
-                    // Color Shift
-                    colors[i3] = THREE.MathUtils.lerp(colors[i3], rR, 0.1);
-                    colors[i3+1] = THREE.MathUtils.lerp(colors[i3+1], rG, 0.1);
-                    colors[i3+2] = THREE.MathUtils.lerp(colors[i3+2], rB, 0.1);
-                }
-
-                // Core Light turns Red
-                coreLight.color.setHex(0xff2200);
-                coreLight.intensity = 2 + Math.random() * 2;
-                particles.rotation.y += 0.2; // Fast spin
-            }
-
-            // 2. EXPLODING (OPEN AFTER FIST)
-            else if (state.mode === 'EXPLODING') {
-                state.chargeLevel = Math.max(state.chargeLevel - 0.05, 0);
-
-                // Color Target: White
-                const wR = CONFIG.explodeColor.r;
-
-                // Time check
-                if(Date.now() - state.explosionTime > 2000) {
-                    state.mode = 'REFORMING';
-                }
-
-                for(let i=0; i<CONFIG.count; i++) {
-                    const i3 = i*3;
-                    
-                    // Blast Outward based on Velocity Vector
-                    // Add some noise to the velocity for realism
-                    positions[i3] += vels[i3] * CONFIG.explosionForce;
-                    positions[i3+1] += vels[i3+1] * CONFIG.explosionForce;
-                    positions[i3+2] += vels[i3+2] * CONFIG.explosionForce;
-
-                    // Flash White then fade
-                    colors[i3] = THREE.MathUtils.lerp(colors[i3], wR, 0.2);
-                    colors[i3+1] = THREE.MathUtils.lerp(colors[i3+1], wR, 0.2);
-                    colors[i3+2] = THREE.MathUtils.lerp(colors[i3+2], wR, 0.2);
-                }
-                
-                coreLight.intensity = 10 * (state.chargeLevel + 0.1); // Bright flash
-                camera.position.x = (Math.random()-0.5) * 2; // Screen shake
-                camera.position.y = (Math.random()-0.5) * 2;
-            }
-
-            // 3. REFORMING (AUTO AFTER EXPLOSION)
-            else if (state.mode === 'REFORMING') {
-                let totalDist = 0;
-                // Color Target: Cyan
-                const cR = CONFIG.idleColor.r;
-                const cG = CONFIG.idleColor.g;
-                const cB = CONFIG.idleColor.b;
-
-                for(let i=0; i<CONFIG.count; i++) {
-                    const i3 = i*3;
-                    
-                    // Lerp back to Initial Sphere shape
-                    positions[i3] += (initial[i3] - positions[i3]) * CONFIG.returnSpeed;
-                    positions[i3+1] += (initial[i3+1] - positions[i3+1]) * CONFIG.returnSpeed;
-                    positions[i3+2] += (initial[i3+2] - positions[i3+2]) * CONFIG.returnSpeed;
-
-                    colors[i3] = THREE.MathUtils.lerp(colors[i3], cR, 0.05);
-                    colors[i3+1] = THREE.MathUtils.lerp(colors[i3+1], cG, 0.05);
-                    colors[i3+2] = THREE.MathUtils.lerp(colors[i3+2], cB, 0.05);
-
-                    totalDist += Math.abs(initial[i3] - positions[i3]);
-                }
-
-                if(totalDist / CONFIG.count < 2.0) {
-                    state.mode = 'IDLE';
-                    camera.position.set(0,0,100); // Reset cam
-                }
-            }
-
-            // 4. IDLE / INTERACTIVE (NORMAL OPEN HAND)
-            else { // IDLE
-                state.chargeLevel = 0;
-                
-                // Color Target: Cyan
-                const cR = CONFIG.idleColor.r;
-                const cG = CONFIG.idleColor.g;
-                const cB = CONFIG.idleColor.b;
-
-                // If Hand Detected: Rotate & Move
-                if(state.handDetected) {
-                    // Smooth Rotation based on hand pos
-                    const targetRotY = state.handPos.x * 2.5; // Yaw
-                    const targetRotX = state.handPos.y * 2.5; // Pitch
-                    
-                    particles.rotation.y += (targetRotY - particles.rotation.y) * 0.1;
-                    particles.rotation.x += (targetRotX - particles.rotation.x) * 0.1;
-                    
-                    // Gentle follow
-                    particles.position.x += (state.handPos.x * 10 - particles.position.x) * 0.1;
-                    particles.position.y += (state.handPos.y * 10 - particles.position.y) * 0.1;
-                } else {
-                    // Auto Idle Spin
-                    particles.rotation.y += 0.002;
-                    particles.position.lerp(new THREE.Vector3(0,0,0), 0.05);
-                }
-
-                // Particle Breathing Animation
-                for(let i=0; i<CONFIG.count; i++) {
-                    const i3 = i*3;
-                    
-                    // Restore colors
-                    colors[i3] = THREE.MathUtils.lerp(colors[i3], cR, 0.05);
-                    colors[i3+1] = THREE.MathUtils.lerp(colors[i3+1], cG, 0.05);
-                    colors[i3+2] = THREE.MathUtils.lerp(colors[i3+2], cB, 0.05);
-
-                    // Sine wave breathing
-                    const noise = Math.sin(time * 2 + initial[i3+1]) * 0.5;
-                    positions[i3] = initial[i3] + vels[i3] * noise;
-                    positions[i3+1] = initial[i3+1] + vels[i3+1] * noise;
-                    positions[i3+2] = initial[i3+2] + vels[i3+2] * noise;
-                }
-                
-                coreLight.color.setHex(0x00f0ff);
-                coreLight.intensity = 1 + Math.sin(time*3)*0.5;
-            }
-
-            particles.geometry.attributes.position.needsUpdate = true;
-            particles.geometry.attributes.color.needsUpdate = true;
+            // TRAIL EFFECT LOGIC
+            // Instead of clearing the screen, we draw a semi-transparent black rectangle
+            // This fades previous frames slowly, creating trails
             
+            // 1. Render a fading quad manually? No, simpler way in pure ThreeJS without post-process:
+            // Use autoClear = false.
+            // Every frame, render a full-screen black quad with low opacity.
+            
+            // Hack for Trails using simple clearing mechanics
+            // Just clearing with low opacity doesn't work well in standard WebGLRenderer without accumulation buffer.
+            // Alternative: We create a fade plane.
+            
+            if (!this.fadePlane) {
+                const geom = new THREE.PlaneGeometry(10000, 10000);
+                const mat = new THREE.MeshBasicMaterial({
+                    color: 0x000000,
+                    transparent: true,
+                    opacity: 0.15 // Adjust trail length here (Lower = Longer trails)
+                });
+                this.fadePlane = new THREE.Mesh(geom, mat);
+                this.fadePlane.position.z = -100;
+                // We don't add to main scene, we render it separately
+                this.fadeScene = new THREE.Scene();
+                this.fadeScene.add(this.fadePlane);
+                this.fadeCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+            }
+
+            // Render Fade Plane (dims previous frame)
+            renderer.render(this.fadeScene, this.fadeCam);
+
+            // Render Boids on top
             renderer.render(scene, camera);
-            updateUI();
         }
 
-        // --- HAND TRACKING & LOGIC ---
-        function updateUI() {
-            document.getElementById('debug-state').innerText = "SYSTEM STATUS: " + state.mode;
-            document.getElementById('energy-bar').style.width = (state.chargeLevel * 100) + "%";
-            
-            const instrBoom = document.getElementById('instr-boom');
-            if(state.mode === 'CHARGING') instrBoom.classList.remove('hidden');
-            else instrBoom.classList.add('hidden');
-        }
-
+        // --- HAND TRACKING ---
         function onResults(results) {
-            document.getElementById('loading').style.display = 'none';
+            document.getElementById('loader').style.display = 'none';
             document.getElementById('input-video').style.display = 'block';
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                state.handDetected = true;
                 const lm = results.multiHandLandmarks[0];
+                state.handDetected = true;
 
-                // 1. Calculate Hand Position (Center)
-                // Invert X for mirror feel
+                // Position
                 const x = (1 - lm[9].x) * 2 - 1; 
                 const y = -(lm[9].y * 2 - 1);
-                
-                state.handPos.lerp(new THREE.Vector3(x, y, 0), 0.3);
+                state.handPos.lerp(new THREE.Vector3(x, y, 0), 0.2);
 
-                // 2. Gesture Detection: FIST vs OPEN
-                // Measure average distance of finger tips to wrist
+                // Gesture
                 const wrist = lm[0];
-                const tips = [lm[8], lm[12], lm[16], lm[20]]; // Exclude thumb for robustness
+                const tips = [lm[8], lm[12], lm[16], lm[20]];
                 let avgDist = 0;
-                
-                tips.forEach(tip => {
-                    avgDist += Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
-                });
+                tips.forEach(t => avgDist += Math.hypot(t.x - wrist.x, t.y - wrist.y));
                 avgDist /= 4;
 
-                // Thresholds
-                const FIST_THRESHOLD = 0.22; // Tight close
-                const OPEN_THRESHOLD = 0.35; // Clearly open
+                const isFist = avgDist < 0.22;
 
-                const isFist = avgDist < FIST_THRESHOLD;
-                const isOpen = avgDist > OPEN_THRESHOLD;
+                // Victory check
+                const isPeace = (lm[8].y < lm[6].y) && (lm[12].y < lm[10].y) && (lm[16].y > lm[14].y);
 
-                // --- CORE LOGIC FLOW ---
+                // Logic
+                const statusEl = document.getElementById('status');
                 
-                // If Fist -> Start Charging immediately
-                if (isFist) {
-                    state.mode = 'CHARGING';
-                }
-                
-                // If Open Hand DETECTED
-                else if (isOpen) {
-                    // Check previous state
-                    if (state.mode === 'CHARGING') {
-                        // We were charging, now we opened -> EXPLODE!
-                        state.mode = 'EXPLODING';
-                        state.explosionTime = Date.now();
-                    } 
-                    else if (state.mode !== 'EXPLODING' && state.mode !== 'REFORMING') {
-                        // Normal Open Hand -> Just Control
-                        state.mode = 'IDLE';
+                if (isPeace) {
+                    state.mode = 'FREEZE';
+                    statusEl.innerText = "STATUS: TEMPORAL STASIS";
+                    statusEl.className = "text-xs text-blue-400";
+                } else if (isFist) {
+                    state.mode = 'GRAVITY';
+                    statusEl.innerText = "STATUS: GRAVITY WELL DETECTED";
+                    statusEl.className = "text-xs text-red-500 font-bold";
+                } else {
+                    if (state.mode === 'GRAVITY') {
+                        // Just released fist
+                        state.shockwave = 1.5; // Trigger explosion
                     }
+                    state.mode = 'ORBIT';
+                    statusEl.innerText = "STATUS: SWARM ORBITING";
+                    statusEl.className = "text-xs text-green-400";
                 }
-                // (If in between threshold, maintain current state usually, but here we default to idle to be safe)
 
             } else {
                 state.handDetected = false;
-                // If hand lost while charging, cancel charge gently
-                if(state.mode === 'CHARGING') state.mode = 'REFORMING';
+                state.mode = 'IDLE';
+                document.getElementById('status').innerText = "STATUS: AWAITING INPUT";
             }
         }
 
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        
-        hands.setOptions({
-            maxNumHands: 1,
-            modelComplexity: 0, // Lite for speed
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         hands.onResults(onResults);
 
-        const videoElement = document.getElementById('input-video');
-        const cameraFeed = new Camera(videoElement, {
-            onFrame: async () => { await hands.send({image: videoElement}); },
-            width: 320,
-            height: 240
+        const video = document.getElementById('input-video');
+        const cameraFeed = new Camera(video, {
+            onFrame: async () => { await hands.send({image: video}); },
+            width: 320, height: 240
         });
 
-        // Start
         init();
         cameraFeed.start();
 
