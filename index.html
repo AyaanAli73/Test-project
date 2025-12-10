@@ -3,49 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stark Interface: Ultimate</title>
+    <title>Stark Tech: Ultimate Physics</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Consolas', monospace; }
-        #c { width: 100vw; height: 100vh; display: block; }
+        body { margin: 0; overflow: hidden; background-color: #020202; font-family: 'Courier New', monospace; }
+        #c { width: 100vw; height: 100vh; display: block; position: absolute; top: 0; left: 0; z-index: 1; }
 
-        /* Tech HUD */
+        /* HUD Layer */
         .hud {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
+            pointer-events: none; z-index: 10;
         }
-        
-        .panel {
-            position: absolute; top: 20px; left: 20px;
-            border-left: 4px solid #00ffff;
-            padding-left: 15px;
-            background: linear-gradient(90deg, rgba(0,20,30,0.8), transparent);
-        }
-        
-        #sys-title { color: #00ffff; font-size: 12px; letter-spacing: 2px; margin-bottom: 5px; }
-        #sys-status { color: #fff; font-size: 20px; font-weight: bold; text-shadow: 0 0 10px rgba(0,255,255,0.5); }
-        #sys-mode { color: #aaa; font-size: 14px; margin-top: 5px; }
 
-        /* Camera Feed */
-        .cam-frame {
-            position: absolute; bottom: 20px; right: 20px;
-            width: 120px; height: 90px;
-            border: 1px solid #333; border-radius: 6px;
-            overflow: hidden; background: #000; opacity: 0.8;
-            transition: 0.3s;
+        .status-panel {
+            position: absolute; top: 20px; left: 20px;
+            border-left: 3px solid #00ffff;
+            padding-left: 15px;
+            background: linear-gradient(90deg, rgba(0,20,30,0.6), transparent);
         }
-        .cam-active { border-color: #00ffff; box-shadow: 0 0 20px rgba(0,255,255,0.2); }
+
+        #sys-header { color: #00ffff; font-size: 12px; letter-spacing: 2px; }
+        #sys-text { color: #fff; font-size: 24px; font-weight: bold; text-shadow: 0 0 20px cyan; margin-top: 5px; }
+
+        /* Camera Preview (Bottom Right) */
+        .cam-preview {
+            position: absolute; bottom: 20px; right: 20px;
+            width: 100px; height: 75px;
+            border: 1px solid #333; border-radius: 6px;
+            background: #000; overflow: hidden; z-index: 20;
+            opacity: 0.7; transition: 0.3s;
+        }
+        .cam-active { border-color: #00ffff; box-shadow: 0 0 15px rgba(0,255,255,0.2); opacity: 1; }
         #input_video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 
-        #loader {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: #00ffff; background: rgba(0,10,20,0.95);
-            padding: 20px 40px; border: 1px solid #00ffff;
-            border-radius: 4px; text-align: center;
-            box-shadow: 0 0 30px rgba(0,255,255,0.2);
-        }
     </style>
 
+    <!-- 1. Imports -->
     <script type="importmap">
         { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
     </script>
@@ -55,37 +47,35 @@
 </head>
 <body>
 
-    <div id="loader">CALIBRATING SENSORS...<br><small>Please Allow Camera</small></div>
-    
     <div class="hud">
-        <div class="panel">
-            <div id="sys-title">STARK OS v12.4</div>
-            <div id="sys-status">STANDBY</div>
-            <div id="sys-mode">WAITING FOR INPUT</div>
+        <div class="status-panel">
+            <div id="sys-header">STARK INDUSTRIES OS</div>
+            <div id="sys-text">INITIALIZING...</div>
         </div>
     </div>
 
-    <div class="cam-frame" id="cam-box">
+    <div class="cam-preview" id="cam-box">
         <video id="input_video" playsinline webkit-playsinline></video>
     </div>
+
     <canvas id="c"></canvas>
 
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 1. SETUP ---
+        // --- 1. SCENE SETUP ---
         const canvas = document.querySelector('#c');
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.003);
+        scene.fog = new THREE.FogExp2(0x020202, 0.002);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.z = 7.5;
+        camera.position.z = 7;
 
-        // --- 2. PARTICLES SYSTEM (Dual Shape) ---
+        // --- 2. PARTICLE SYSTEM GENERATION ---
         const count = 3500;
         const geometry = new THREE.BufferGeometry();
         
@@ -93,169 +83,143 @@
         const velocities = new Float32Array(count * 3);
         const colors = new Float32Array(count * 3);
         
-        // Target Positions
-        const sphereHomes = new Float32Array(count * 3);
-        const ringHomes = new Float32Array(count * 3); // For Victory Gesture
+        // Target shapes
+        const sphereTarget = new Float32Array(count * 3);
+        const ringTarget = new Float32Array(count * 3);
 
         const cBlue = new THREE.Color(0x00ffff);
         const cRed = new THREE.Color(0xff0044);
-        const cCyan = new THREE.Color(0x00ff88);
+        const cGreen = new THREE.Color(0x00ff88);
 
         for(let i=0; i<count; i++) {
             const i3 = i*3;
             
-            // 1. SPHERE SHAPE
+            // A. Sphere Shape
             const r = 2.5 + Math.random() * 0.5;
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos((Math.random() * 2) - 1);
             
-            sphereHomes[i3] = r * Math.sin(phi) * Math.cos(theta);
-            sphereHomes[i3+1] = r * Math.sin(phi) * Math.sin(theta);
-            sphereHomes[i3+2] = r * Math.cos(phi);
+            sphereTarget[i3] = r * Math.sin(phi) * Math.cos(theta);
+            sphereTarget[i3+1] = r * Math.sin(phi) * Math.sin(theta);
+            sphereTarget[i3+2] = r * Math.cos(phi);
 
-            // 2. RING SHAPE (Torus) - New Gesture
-            const ringR = 3.5 + Math.random() * 0.5; // Main radius
-            const tubeR = 0.5 + Math.random() * 0.5; // Thickness
+            // B. Ring Shape
+            const ringR = 4.0 + Math.random() * 0.5;
             const ringTheta = Math.random() * Math.PI * 2;
-            const ringPhi = Math.random() * Math.PI * 2;
             
-            // Torus formula: (R + r * cos(theta)) * cos(phi)
-            ringHomes[i3] = (ringR + tubeR * Math.cos(ringTheta)) * Math.cos(ringPhi); // x
-            ringHomes[i3+1] = tubeR * Math.sin(ringTheta) * 0.5; // Flattened Y
-            ringHomes[i3+2] = (ringR + tubeR * Math.cos(ringTheta)) * Math.sin(ringPhi); // z
+            ringTarget[i3] = ringR * Math.cos(ringTheta);
+            ringTarget[i3+1] = (Math.random()-0.5) * 0.5; // Flattened Y
+            ringTarget[i3+2] = ringR * Math.sin(ringTheta);
 
-            // Initial Pos
-            positions[i3] = sphereHomes[i3];
-            positions[i3+1] = sphereHomes[i3+1];
-            positions[i3+2] = sphereHomes[i3+2];
+            // Initial Position = Sphere
+            positions[i3] = sphereTarget[i3];
+            positions[i3+1] = sphereTarget[i3+1];
+            positions[i3+2] = sphereTarget[i3+2];
 
+            // Initial Color
             colors[i3] = cBlue.r; colors[i3+1] = cBlue.g; colors[i3+2] = cBlue.b;
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-        // Glow Texture
+        // Generate Texture Programmatically (No Loading Errors)
         const cvs = document.createElement('canvas'); cvs.width=32; cvs.height=32;
         const ctx = cvs.getContext('2d');
         const grd = ctx.createRadialGradient(16,16,0,16,16,16);
-        grd.addColorStop(0,'rgba(255,255,255,1)'); 
-        grd.addColorStop(0.4,'rgba(100,255,255,0.4)'); 
+        grd.addColorStop(0,'rgba(255,255,255,1)');
+        grd.addColorStop(0.2,'rgba(100,255,255,0.6)');
         grd.addColorStop(1,'rgba(0,0,0,0)');
         ctx.fillStyle=grd; ctx.fillRect(0,0,32,32);
         const tex = new THREE.Texture(cvs); tex.needsUpdate=true;
 
         const mat = new THREE.PointsMaterial({
-            size: 0.14, map: tex, vertexColors: true, 
+            size: 0.15, map: tex, vertexColors: true, 
             transparent: true, opacity: 0.9, 
             blending: THREE.AdditiveBlending, depthWrite: false
         });
+
         const particles = new THREE.Points(geometry, mat);
         scene.add(particles);
 
-        // --- 3. LOGIC & STATE ---
+        // --- 3. STATE MANAGEMENT ---
         let state = {
-            active: false,
-            mode: 'IDLE',   // IDLE, SPHERE, RING, CHARGE, EXPLODE
+            handActive: false,
+            mode: 'IDLE', // IDLE, CHARGE, EXPLODE, RING
+            shapeLerp: 0, // 0=Sphere, 1=Ring
             rotX: 0, rotY: 0,
             targetRotX: 0, targetRotY: 0,
-            transition: 0,  // 0 = Sphere, 1 = Ring
-            reforming: false
+            explodeTime: 0
         };
 
-        const sysStatus = document.getElementById('sys-status');
-        const sysMode = document.getElementById('sys-mode');
+        const uiText = document.getElementById('sys-text');
+        const uiPanel = document.querySelector('.status-panel');
         const camBox = document.getElementById('cam-box');
 
-        // --- 4. HAND TRACKING ---
-        function onResults(results) {
-            document.getElementById('loader').style.display = 'none';
+        function updateUI(text, color) {
+            uiText.innerText = text;
+            uiText.style.color = color;
+            uiText.style.textShadow = `0 0 20px ${color}`;
+            uiPanel.style.borderLeftColor = color;
+        }
 
+        updateUI("SYSTEM ONLINE", "#00ffff"); // Show immediately
+
+        // --- 4. MEDIA PIPE HANDS ---
+        function onResults(results) {
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                state.active = true;
+                state.handActive = true;
                 camBox.classList.add('cam-active');
                 const lm = results.multiHandLandmarks[0];
 
-                // Rotation Target
-                state.targetRotY = (lm[9].x - 0.5) * 4; 
-                state.targetRotX = (lm[9].y - 0.5) * 4;
+                // Rotation Tracking
+                state.targetRotY = (lm[9].x - 0.5) * 5;
+                state.targetRotX = (lm[9].y - 0.5) * 5;
 
-                // GESTURE RECOGNITION
+                // Gesture Recognition
                 const wrist = lm[0];
                 const palmSize = Math.hypot(lm[9].x - wrist.x, lm[9].y - wrist.y);
-                
-                // Finger States (Open or Closed)
-                const isFingerOpen = (idx) => Math.hypot(lm[idx].x - wrist.x, lm[idx].y - wrist.y) > palmSize * 1.3;
-                
-                const indexOpen = isFingerOpen(8);
-                const middleOpen = isFingerOpen(12);
-                const ringOpen = isFingerOpen(16);
-                const pinkyOpen = isFingerOpen(20);
+                const tips = [8, 12, 16, 20];
+                let openFingers = 0;
+                tips.forEach(t => { 
+                    if(Math.hypot(lm[t].x - wrist.x, lm[t].y - wrist.y) > palmSize * 1.3) openFingers++; 
+                });
 
-                const openCount = [indexOpen, middleOpen, ringOpen, pinkyOpen].filter(Boolean).length;
-
-                // Logic Flow
-                if (state.reforming) {
-                    // Lock interaction briefly while reforming
-                    sysStatus.innerText = "SYSTEM REBOOT";
-                    sysMode.innerText = "STABILIZING PARTICLES...";
-                    return; 
-                }
-
-                // 1. FIST (0 fingers open)
-                if (openCount === 0) {
+                // Logic
+                if (state.mode === 'EXPLODE') {
+                    // Lock interaction during explosion
+                } else if (openFingers === 0) {
                     state.mode = 'CHARGE';
-                    updateUI("⚡ CRITICAL MASS", "CHARGING...", "#ff0044");
-                }
-                // 2. VICTORY / PEACE (Index + Middle open)
-                else if (indexOpen && middleOpen && !ringOpen && !pinkyOpen) {
+                    updateUI("⚡ CHARGING", "#ff0044");
+                } else if (openFingers === 2) {
                     state.mode = 'RING';
-                    updateUI("🪐 RING FORMATION", "MORPHING SHAPE", "#00ff88");
-                }
-                // 3. OPEN HAND (All open)
-                else if (openCount >= 3) {
-                    // Check if we were charging before
+                    updateUI("🪐 RING MODE", "#00ff88");
+                } else {
                     if (state.mode === 'CHARGE') {
-                        triggerExplosion();
+                        // Released Fist -> Trigger Explosion
+                        state.mode = 'EXPLODE';
+                        state.explodeTime = Date.now();
+                        updateUI("💥 DETONATION", "#ffffff");
+                        
+                        // Auto-Reform after 1.5s
+                        setTimeout(() => { 
+                            state.mode = 'IDLE'; 
+                            updateUI("🔵 REFORMING", "#00ffff");
+                        }, 1500);
                     } else {
-                        state.mode = 'SPHERE';
-                        updateUI("🔵 CORE STABLE", "MANUAL ROTATION", "#00ffff");
+                        state.mode = 'IDLE';
+                        updateUI("🔵 ACTIVE", "#00ffff");
                     }
-                } 
-                else {
-                    state.mode = 'SPHERE'; // Default
                 }
-
             } else {
-                state.active = false;
+                state.handActive = false;
                 camBox.classList.remove('cam-active');
-                if(!state.reforming) updateUI("STANDBY", "NO INPUT", "#666");
+                if(state.mode !== 'EXPLODE') updateUI("AUTOPILOT", "#555");
             }
         }
 
-        function triggerExplosion() {
-            state.mode = 'EXPLODE';
-            updateUI("💥 DETONATION", "SHOCKWAVE DETECTED", "#fff");
-            
-            // Auto-Reform after 1.5 seconds
-            setTimeout(() => {
-                state.mode = 'SPHERE';
-                state.reforming = true;
-                // Wait for reform animation to finish
-                setTimeout(() => { state.reforming = false; }, 2000);
-            }, 1500);
-        }
-
-        function updateUI(status, mode, color) {
-            sysStatus.innerText = status;
-            sysStatus.style.color = color;
-            sysStatus.style.textShadow = `0 0 15px ${color}`;
-            sysMode.innerText = mode;
-            document.querySelector('.panel').style.borderLeftColor = color;
-        }
-
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
         hands.onResults(onResults);
 
         const video = document.getElementById('input_video');
@@ -266,132 +230,123 @@
         cameraUtils.start();
 
 
-        // --- 5. ADVANCED PHYSICS (Steering Behaviors) ---
+        // --- 5. PHYSICS ENGINE (ARRIVAL BEHAVIOR) ---
+        // This is the "Secret Sauce" for smooth movement without jumping
+        
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
             const delta = Math.min(clock.getDelta(), 0.1);
 
-            // 1. ROTATION
-            if (state.active) {
+            // 1. Smooth Rotation
+            if (state.handActive) {
                 state.rotX += (state.targetRotX - state.rotX) * 0.1;
                 state.rotY += (state.targetRotY - state.rotY) * 0.1;
             } else {
-                state.rotX *= 0.95; state.rotY += 0.002;
+                state.rotX *= 0.95; 
+                state.rotY += 0.003; // Auto spin
             }
             particles.rotation.x = state.rotX;
             particles.rotation.y = state.rotY;
 
-            // 2. MORPH VALUE (Sphere vs Ring)
-            // Transition: 0 = Sphere, 1 = Ring
-            const targetTransition = (state.mode === 'RING') ? 1.0 : 0.0;
-            state.transition += (targetTransition - state.transition) * 0.05; // Smooth morph
+            // 2. Shape Morphing
+            const targetShape = (state.mode === 'RING') ? 1.0 : 0.0;
+            state.shapeLerp += (targetShape - state.shapeLerp) * 0.05;
 
-            // 3. PARTICLE PHYSICS LOOP
+            // 3. Particle Loop
             const pos = geometry.attributes.position.array;
             const col = geometry.attributes.color.array;
 
             // Physics Config
             const maxSpeed = 20.0;
-            const steerForce = 8.0;
+            const steerForce = 5.0; // Lower = Smoother, Higher = Snappier
 
             for(let i=0; i<count; i++) {
                 const i3 = i*3;
                 let px = pos[i3], py = pos[i3+1], pz = pos[i3+2];
                 let vx = velocities[i3], vy = velocities[i3+1], vz = velocities[i3+2];
 
-                // CALCULATE HOME POSITION (Interpolate between Sphere and Ring)
-                // This creates the smooth morphing effect
-                let hx = sphereHomes[i3] * (1 - state.transition) + ringHomes[i3] * state.transition;
-                let hy = sphereHomes[i3+1] * (1 - state.transition) + ringHomes[i3+1] * state.transition;
-                let hz = sphereHomes[i3+2] * (1 - state.transition) + ringHomes[i3+2] * state.transition;
+                // Calculate Target Position (Home)
+                // Blend Sphere and Ring based on shapeLerp
+                let hx = sphereTarget[i3] * (1-state.shapeLerp) + ringTarget[i3] * state.shapeLerp;
+                let hy = sphereTarget[i3+1] * (1-state.shapeLerp) + ringTarget[i3+1] * state.shapeLerp;
+                let hz = sphereTarget[i3+2] * (1-state.shapeLerp) + ringTarget[i3+2] * state.shapeLerp;
 
-                // --- BEHAVIORS ---
+                // --- BEHAVIOR SELECTION ---
 
                 if (state.mode === 'EXPLODE') {
-                    // BEHAVIOR: EXPLOSION
-                    // Ignore home, push outwards from center
-                    const dist = Math.sqrt(px*px + py*py + pz*pz) || 0.1;
-                    const blast = 50.0 * delta; // High instant force
+                    // EXPLOSION: Simple velocity push outwards
+                    const d = Math.sqrt(px*px + py*py + pz*pz) || 1;
+                    const blast = 60.0 * delta; // Power
                     
-                    // Only apply blast if close (shockwave)
-                    if (dist < 10.0) {
-                        vx += (px/dist) * blast;
-                        vy += (py/dist) * blast;
-                        vz += (pz/dist) * blast;
+                    // Only push if close to center
+                    if(d < 10) {
+                        vx += (px/d) * blast;
+                        vy += (py/d) * blast;
+                        vz += (pz/d) * blast;
                     }
-                    
-                    // Color Flash White
-                    col[i3] = 1; col[i3+1] = 1; col[i3+2] = 1;
+                    // Flash White
+                    col[i3]=1; col[i3+1]=1; col[i3+2]=1;
 
                 } else if (state.mode === 'CHARGE') {
-                    // BEHAVIOR: CHARGE (Vibrate)
-                    const distToHome = Math.sqrt((hx-px)**2 + (hy-py)**2 + (hz-pz)**2);
+                    // CHARGE: TIGHT PULL + JITTER
+                    const dx = hx-px, dy = hy-py, dz = hz-pz;
+                    vx += dx * 5.0 * delta;
+                    vy += dy * 5.0 * delta;
+                    vz += dz * 5.0 * delta;
                     
-                    // Pull tight
-                    vx += (hx - px) * 5.0 * delta;
-                    vy += (hy - py) * 5.0 * delta;
-                    vz += (hz - pz) * 5.0 * delta;
-                    
-                    // Jitter
-                    vx += (Math.random()-0.5) * 1.0;
-                    vy += (Math.random()-0.5) * 1.0;
-                    vz += (Math.random()-0.5) * 1.0;
+                    // Vibration
+                    vx += (Math.random()-0.5); 
+                    vy += (Math.random()-0.5); 
+                    vz += (Math.random()-0.5);
 
-                    // Color Red
-                    col[i3] += (cRed.r - col[i3]) * 0.2;
-                    col[i3+1] += (cRed.g - col[i3+1]) * 0.2;
-                    col[i3+2] += (cRed.b - col[i3+2]) * 0.2;
+                    // Red
+                    col[i3] += (cRed.r - col[i3])*0.2;
+                    col[i3+1] += (cRed.g - col[i3+1])*0.2;
+                    col[i3+2] += (cRed.b - col[i3+2])*0.2;
 
                 } else {
-                    // BEHAVIOR: ARRIVE (Smooth Reforming)
-                    // This is the "No Jump" logic.
-                    // Instead of a spring, we steer towards the target.
-                    
-                    const dx = hx - px;
-                    const dy = hy - py;
-                    const dz = hz - pz;
+                    // **ARRIVAL BEHAVIOR (The Fix)**
+                    // This creates the smooth "parking" effect
+                    const dx = hx-px, dy = hy-py, dz = hz-pz;
                     const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
                     
-                    // 1. Calculate Desired Velocity
-                    // If we are far, go full speed.
-                    // If we are close (within 5 units), slow down (Arrival).
-                    let targetSpeed = maxSpeed;
-                    if (dist < 5.0) {
-                        targetSpeed = maxSpeed * (dist / 5.0); // Slow down smoothly
+                    // If far, move fast. If close, slow down.
+                    let desiredSpeed = maxSpeed;
+                    if (dist < 8.0) {
+                        desiredSpeed = maxSpeed * (dist / 8.0); // Ramp down speed
                     }
-                    
-                    const desVx = (dx/dist) * targetSpeed;
-                    const desVy = (dy/dist) * targetSpeed;
-                    const desVz = (dz/dist) * targetSpeed;
 
-                    // 2. Steering Force = Desired - Current
-                    const steerX = (desVx - vx) * steerForce * delta;
-                    const steerY = (desVy - vy) * steerForce * delta;
-                    const steerZ = (desVz - vz) * steerForce * delta;
+                    const desiredVx = (dx/dist) * desiredSpeed;
+                    const desiredVy = (dy/dist) * desiredSpeed;
+                    const desiredVz = (dz/dist) * desiredSpeed;
+
+                    // Steer towards desired velocity
+                    const steerX = (desiredVx - vx) * steerForce * delta;
+                    const steerY = (desiredVy - vy) * steerForce * delta;
+                    const steerZ = (desiredVz - vz) * steerForce * delta;
 
                     vx += steerX;
                     vy += steerY;
                     vz += steerZ;
 
-                    // Color Mix based on transition
-                    let rTarget = cBlue.r * (1-state.transition) + cCyan.r * state.transition;
-                    let gTarget = cBlue.g * (1-state.transition) + cCyan.g * state.transition;
-                    let bTarget = cBlue.b * (1-state.transition) + cCyan.b * state.transition;
+                    // Color Mixing
+                    let rT = cBlue.r * (1-state.shapeLerp) + cGreen.r * state.shapeLerp;
+                    let gT = cBlue.g * (1-state.shapeLerp) + cGreen.g * state.shapeLerp;
+                    let bT = cBlue.b * (1-state.shapeLerp) + cGreen.b * state.shapeLerp;
 
-                    col[i3] += (rTarget - col[i3]) * 0.1;
-                    col[i3+1] += (gTarget - col[i3+1]) * 0.1;
-                    col[i3+2] += (bTarget - col[i3+2]) * 0.1;
+                    col[i3] += (rT - col[i3]) * 0.1;
+                    col[i3+1] += (gT - col[i3+1]) * 0.1;
+                    col[i3+2] += (bT - col[i3+2]) * 0.1;
                 }
 
-                // Global Friction (Air Resistance)
-                // This is crucial to prevent "overshooting" or endless bouncing
-                vx *= 0.92;
-                vy *= 0.92;
-                vz *= 0.92;
+                // Global Friction (Prevents endless drifting)
+                vx *= 0.9;
+                vy *= 0.9;
+                vz *= 0.9;
 
-                // Position Update
+                // Update
                 pos[i3] += vx * delta;
                 pos[i3+1] += vy * delta;
                 pos[i3+2] += vz * delta;
@@ -407,7 +362,7 @@
             renderer.render(scene, camera);
         }
 
-        animate();
+        animate(); // Start immediately
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
