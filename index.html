@@ -3,83 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Galactic Hand Force</title>
+    <title>Neon Atomic Spinner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Three.js for GPU Acceleration -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
-            }
-        }
-    </script>
-    
-    <!-- MediaPipe Vision -->
+    <!-- Vision AI -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; }
-        canvas { display: block; }
-        
-        #videoElement { 
-            display: none; 
-            transform: scaleX(-1); 
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #000; 
+            touch-action: none;
+            font-family: 'Courier New', Courier, monospace;
         }
-
+        canvas { 
+            display: block; 
+        }
+        #videoElement { display: none; transform: scaleX(-1); }
+        
+        /* HUD UI */
         .hud {
-            position: absolute;
-            bottom: 20px;
+            position: fixed;
+            top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            text-align: center;
-            pointer-events: none;
+            display: flex;
+            gap: 10px;
             z-index: 10;
         }
-
-        .status-badge {
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 8px 16px;
-            border-radius: 999px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            color: #00ffcc;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 0 20px rgba(0, 255, 204, 0.2);
-            transition: all 0.3s ease;
+        .pill {
+            background: rgba(0,0,0,0.7);
+            border: 1px solid #333;
+            color: #0f0;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+            transition: all 0.2s;
         }
-
-        .cam-preview {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 120px;
-            height: 90px;
-            border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.2);
-            background: #000;
-            opacity: 0.5;
-            z-index: 5;
-            overflow: hidden;
-        }
-        .cam-preview video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1);
-        }
-
-        /* Loading Animation */
-        #loader {
+        
+        .loading {
             position: fixed;
             inset: 0;
             background: #000;
+            color: #0f0;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -87,350 +59,345 @@
             z-index: 100;
             transition: opacity 0.5s;
         }
+        
+        .preview-box {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 100px;
+            height: 75px;
+            border: 1px solid #333;
+            background: #111;
+            opacity: 0.5;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .preview-box video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
     </style>
 </head>
 <body>
 
-    <div id="loader">
-        <div class="text-white text-2xl font-bold tracking-[0.2em] mb-4">INITIALIZING CORE</div>
-        <div class="w-48 h-1 bg-gray-800 rounded-full overflow-hidden">
-            <div id="loaderBar" class="h-full bg-cyan-500 w-0 transition-all duration-[2000ms]"></div>
-        </div>
-        <p class="text-gray-500 text-xs mt-4">Allow camera to begin</p>
+    <!-- Loading Screen -->
+    <div id="loader" class="loading">
+        <div class="text-4xl font-bold mb-4 animate-pulse">SYSTEM START</div>
+        <div class="text-xs text-gray-500">INITIALIZING ATOMIC ENGINE...</div>
     </div>
 
-    <!-- Hidden Video Source -->
+    <!-- Canvas -->
+    <canvas id="canvas"></canvas>
+
+    <!-- Hidden Video -->
     <video id="videoElement" playsinline></video>
     
-    <!-- Small PIP -->
-    <div class="cam-preview">
+    <!-- Camera Preview -->
+    <div class="preview-box">
         <video id="previewVideo" playsinline muted autoplay></video>
     </div>
 
+    <!-- Status HUD -->
     <div class="hud">
-        <div id="status" class="status-badge">
-            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse" id="statusDot"></span>
-            <span id="statusText">WAITING FOR HAND</span>
-        </div>
-        <div class="text-gray-500 text-[10px] mt-2 tracking-wider">PINCH TO CHARGE • RELEASE TO EXPLODE</div>
+        <div id="statusBadge" class="pill border-gray-600 text-gray-500">NO HAND</div>
+        <div id="energyBadge" class="pill border-blue-900 text-blue-400">0% CHARGE</div>
     </div>
 
-    <script type="module">
-        import * as THREE from 'three';
-
-        // --- Configuration ---
-        const PARTICLE_COUNT = 15000; // High count for GPU
-        const CAMERA_Z = 1000;
-        
-        // --- State ---
-        const state = {
-            handActive: false,
-            handX: 0, 
-            handY: 0,
-            isPinching: false,
-            wasPinching: false,
-            chargeLevel: 0, // 0 to 1
-        };
-
-        // --- Elements ---
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
         const videoElement = document.getElementById('videoElement');
         const previewVideo = document.getElementById('previewVideo');
-        const statusText = document.getElementById('statusText');
-        const statusDot = document.getElementById('statusDot');
-        const statusBadge = document.getElementById('status');
-        const loader = document.getElementById('loader');
-        const loaderBar = document.getElementById('loaderBar');
-
-        // --- Three.js Setup ---
-        const scene = new THREE.Scene();
-        // Cinematic fog to hide edges
-        scene.fog = new THREE.FogExp2(0x000000, 0.0008); 
-
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 3000);
-        camera.position.z = CAMERA_Z;
-
-        const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        document.body.appendChild(renderer.domElement);
-
-        // --- Particle System ---
-        const geometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(PARTICLE_COUNT * 3);
-        const velocities = new Float32Array(PARTICLE_COUNT * 3);
-        const colors = new Float32Array(PARTICLE_COUNT * 3);
-        const sizes = new Float32Array(PARTICLE_COUNT);
-
-        const color1 = new THREE.Color(0x00ffff); // Cyan
-        const color2 = new THREE.Color(0xff00ff); // Magenta
         
-        for (let i = 0; i < PARTICLE_COUNT; i++) {
-            // Random spread
-            positions[i * 3] = (Math.random() - 0.5) * 2000;
-            positions[i * 3 + 1] = (Math.random() - 0.5) * 1500;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 1000; // Depth
+        // UI Elements
+        const statusBadge = document.getElementById('statusBadge');
+        const energyBadge = document.getElementById('energyBadge');
+        const loader = document.getElementById('loader');
 
-            velocities[i * 3] = (Math.random() - 0.5) * 2;
-            velocities[i * 3 + 1] = (Math.random() - 0.5) * 2;
-            velocities[i * 3 + 2] = (Math.random() - 0.5) * 2;
+        // Configuration
+        const PARTICLE_COUNT = 300; // Fewer particles, but bigger/brighter
+        const RINGS = 3; // Number of atomic rings
+        
+        // State
+        let width, height;
+        let hand = { x: 0, y: 0, active: false, pinching: false };
+        let particles = [];
+        let globalHue = 0;
+        let explosionForce = 0;
 
-            // Mix colors
-            const mixedColor = color1.clone().lerp(color2, Math.random());
-            colors[i * 3] = mixedColor.r;
-            colors[i * 3 + 1] = mixedColor.g;
-            colors[i * 3 + 2] = mixedColor.b;
-
-            sizes[i] = Math.random() * 4;
+        // Resize
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
         }
+        window.addEventListener('resize', resize);
+        resize();
 
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
-        // Shader Material for Glowing Dots
-        // Using a custom shader gives us better performance and visual control than PointsMaterial
-        const material = new THREE.ShaderMaterial({
-            uniforms: {
-                pointTexture: { value: createCircleTexture() }
-            },
-            vertexShader: `
-                attribute float size;
-                attribute vec3 color;
-                varying vec3 vColor;
-                void main() {
-                    vColor = color;
-                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                    gl_PointSize = size * (1000.0 / -mvPosition.z);
-                    gl_Position = projectionMatrix * mvPosition;
-                }
-            `,
-            fragmentShader: `
-                uniform sampler2D pointTexture;
-                varying vec3 vColor;
-                void main() {
-                    gl_FragColor = vec4(vColor, 1.0);
-                    gl_FragColor = gl_FragColor * texture2D(pointTexture, gl_PointCoord);
-                }
-            `,
-            blending: THREE.AdditiveBlending,
-            depthTest: false,
-            transparent: true
-        });
-
-        const particles = new THREE.Points(geometry, material);
-        scene.add(particles);
-
-        function createCircleTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 32;
-            canvas.height = 32;
-            const context = canvas.getContext('2d');
-            const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
-            gradient.addColorStop(0, 'rgba(255,255,255,1)');
-            gradient.addColorStop(0.4, 'rgba(255,255,255,0.5)');
-            gradient.addColorStop(1, 'rgba(0,0,0,0)');
-            context.fillStyle = gradient;
-            context.fillRect(0,0,32,32);
-            const texture = new THREE.Texture(canvas);
-            texture.needsUpdate = true;
-            return texture;
-        }
-
-        // --- Physics Engine (The Fun Part) ---
-        function updateParticles() {
-            const positions = particles.geometry.attributes.position.array;
-            const colors = particles.geometry.attributes.color.array;
-            
-            // Map hand coordinates to 3D world space approximately
-            // Screen is -Width/2 to Width/2. 
-            // At Z=0 (where particles effectively are), width is approx 2 * tan(fov/2) * dist
-            const targetX = (state.handX - 0.5) * 2 * (window.innerWidth / 1.5);
-            const targetY = -(state.handY - 0.5) * 2 * (window.innerHeight / 1.5); // Invert Y
-            
-            // Explosion Trigger
-            let isExploding = false;
-            if (state.wasPinching && !state.isPinching) {
-                isExploding = true;
-                // Shake camera effect
-                camera.position.x = (Math.random() - 0.5) * 50;
-                camera.position.y = (Math.random() - 0.5) * 50;
-                setTimeout(() => { camera.position.x = 0; camera.position.y = 0; }, 200);
+        // --- Particle Class ---
+        class Particle {
+            constructor() {
+                this.reset();
             }
-            state.wasPinching = state.isPinching;
 
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                const ix = i * 3;
-                const iy = i * 3 + 1;
-                const iz = i * 3 + 2;
+            reset() {
+                // Assign to a specific ring (0, 1, or 2)
+                this.ringIndex = Math.floor(Math.random() * RINGS);
+                // Random starting angle
+                this.angle = Math.random() * Math.PI * 2;
+                // Offset speed so they don't all move perfectly in sync
+                this.speed = 0.05 + Math.random() * 0.05;
+                // Mode
+                this.state = 'ORBIT'; // ORBIT, CHARGE, EXPLODE
+                
+                // Explode Physics
+                this.x = 0;
+                this.y = 0;
+                this.vx = 0;
+                this.vy = 0;
+                
+                // Visuals
+                this.size = 3 + Math.random() * 4;
+                this.color = `hsl(${Math.random() * 360}, 100%, 50%)`;
+            }
 
-                let px = positions[ix];
-                let py = positions[iy];
-                let pz = positions[iz];
+            update(handX, handY, isPinching) {
+                if (this.state === 'EXPLODE') {
+                    // Physics Movement
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    
+                    // Friction
+                    this.vx *= 0.98;
+                    this.vy *= 0.98;
+                    
+                    // Bounce off walls
+                    if (this.x < 0 || this.x > width) {
+                        this.vx *= -0.8;
+                        this.x = Math.max(0, Math.min(width, this.x));
+                    }
+                    if (this.y < 0 || this.y > height) {
+                        this.vy *= -0.8;
+                        this.y = Math.max(0, Math.min(height, this.y));
+                    }
 
-                let vx = velocities[ix];
-                let vy = velocities[iy];
-                let vz = velocities[iz];
-
-                if (state.handActive) {
-                    const dx = targetX - px;
-                    const dy = targetY - py;
-                    const dz = 0 - pz; // Attract to Z plane 0
-                    const distSq = dx*dx + dy*dy + dz*dz;
-                    const dist = Math.sqrt(distSq);
-
-                    if (isExploding) {
-                        // EXPLOSION: Massive outward force from hand center
-                        const force = 1000 / (dist + 10); // Stronger when closer
-                        // Add randomness to make it look like sparks
-                        velocities[ix] -= (dx / dist) * force * (2 + Math.random());
-                        velocities[iy] -= (dy / dist) * force * (2 + Math.random());
-                        velocities[iz] -= (dz / dist) * force * (2 + Math.random());
-                        
-                        // Flash White
-                        colors[ix] = 1; colors[iy] = 1; colors[iz] = 1;
-
-                    } else if (state.isPinching) {
-                        // BLACK HOLE: Aggressive suction
-                        // Velocity damping (friction) to stop them flying past
-                        velocities[ix] *= 0.85;
-                        velocities[iy] *= 0.85;
-                        velocities[iz] *= 0.85;
-
-                        // Pull force
-                        const force = 20; 
-                        velocities[ix] += (dx / dist) * force;
-                        velocities[iy] += (dy / dist) * force;
-                        velocities[iz] += (dz / dist) * force;
-
-                        // Color turns Red/Orange as they heat up
-                        colors[ix] = 1; 
-                        colors[iy] = 0.2; 
-                        colors[iz] = 0;
-
-                    } else {
-                        // ELECTRON VORTEX: Spin around hand
-                        // Calculate tangent vector for rotation
-                        // Cross product of Up Vector (0,0,1) and Direction to Hand
-                        const crossX = -dy;
-                        const crossY = dx;
-                        
-                        // Add rotational force
-                        const rotSpeed = 20000 / (distSq + 1000); // Faster near center
-                        velocities[ix] += (crossX / dist) * rotSpeed;
-                        velocities[iy] += (crossY / dist) * rotSpeed;
-
-                        // Slight attraction to keep them in orbit
-                        velocities[ix] += (dx / dist) * 2;
-                        velocities[iy] += (dy / dist) * 2;
-                        velocities[iz] += (dz / dist) * 2;
-
-                        // Damping
-                        velocities[ix] *= 0.96;
-                        velocities[iy] *= 0.96;
-                        velocities[iz] *= 0.96;
-
-                        // Reset Color to Blue/Cyan/Purple
-                        if (colors[ix] > 0.5 && colors[iy] < 0.5) { // If red (from pinch)
-                            colors[ix] *= 0.95; // Fade red
-                            colors[iy] += 0.05; // Bring back green/blue
-                            colors[iz] += 0.05;
-                        }
+                    // Return to orbit if slow enough
+                    if (Math.abs(this.vx) < 0.5 && Math.abs(this.vy) < 0.5 && hand.active) {
+                        this.state = 'ORBIT';
                     }
 
                 } else {
-                    // IDLE: Gentle drift
-                    velocities[ix] += (Math.random() - 0.5) * 0.2;
-                    velocities[iy] += (Math.random() - 0.5) * 0.2;
-                    velocities[iz] += (Math.random() - 0.5) * 0.2;
-                    velocities[ix] *= 0.98;
-                    velocities[iy] *= 0.98;
-                    velocities[iz] *= 0.98;
+                    // Calculate Base Position (Center of Hand)
+                    const cx = handX;
+                    const cy = handY;
+
+                    // Update Angle
+                    // Pinching makes them spin super fast
+                    const speedMultiplier = isPinching ? 0.3 : 0.05;
+                    this.angle += this.speed + speedMultiplier;
+
+                    // Calculate Orbit Radius
+                    // Pinching pulls them in tight (30px), Open hand is wide (150px)
+                    let targetRadius = isPinching ? 20 : 120;
+                    
+                    // Add some "breathing" movement
+                    targetRadius += Math.sin(Date.now() / 200) * 10;
+
+                    // 3D Atom Effect Math
+                    // We flatten the circle to make it look like a 3D ring tilted
+                    let ox, oy;
+                    
+                    if (this.ringIndex === 0) {
+                        // Horizontal Ring
+                        ox = Math.cos(this.angle) * targetRadius;
+                        oy = Math.sin(this.angle) * (targetRadius * 0.3); // Flattened Y
+                    } else if (this.ringIndex === 1) {
+                        // Diagonal 1 (\)
+                        const a = this.angle;
+                        const r = targetRadius;
+                        // Rotate coordinates by 60 degrees
+                        const xRaw = Math.cos(a) * r;
+                        const yRaw = Math.sin(a) * (r * 0.3);
+                        // Rotate matrix
+                        ox = xRaw * 0.5 - yRaw * 0.866;
+                        oy = xRaw * 0.866 + yRaw * 0.5;
+                    } else {
+                        // Diagonal 2 (/)
+                        const a = this.angle;
+                        const r = targetRadius;
+                        // Rotate coordinates by -60 degrees
+                        const xRaw = Math.cos(a) * r;
+                        const yRaw = Math.sin(a) * (r * 0.3);
+                        ox = xRaw * 0.5 + yRaw * 0.866;
+                        oy = -xRaw * 0.866 + yRaw * 0.5;
+                    }
+
+                    // Lerp position (Smooth transition)
+                    // If we just switched from explode, snap. Otherwise smooth.
+                    this.x = cx + ox;
+                    this.y = cy + oy;
                 }
-
-                // Apply Velocity
-                positions[ix] += velocities[ix];
-                positions[iy] += velocities[iy];
-                positions[iz] += velocities[iz];
-
-                // Bounds check (teleport if too far to keep scene populated)
-                if (positions[ix] > 2000) positions[ix] -= 4000;
-                if (positions[ix] < -2000) positions[ix] += 4000;
-                if (positions[iy] > 1500) positions[iy] -= 3000;
-                if (positions[iy] < -1500) positions[iy] += 3000;
             }
 
-            particles.geometry.attributes.position.needsUpdate = true;
-            particles.geometry.attributes.color.needsUpdate = true;
+            draw(ctx) {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                
+                if (this.state === 'EXPLODE') {
+                    ctx.fillStyle = '#fff'; // White hot sparks
+                } else if (hand.pinching) {
+                    ctx.fillStyle = '#ff0055'; // Red Angry Energy
+                } else {
+                    // Rainbow rings
+                    const ringHue = (globalHue + (this.ringIndex * 120)) % 360;
+                    ctx.fillStyle = `hsl(${ringHue}, 100%, 60%)`;
+                }
+                
+                ctx.fill();
+                
+                // Add Glow
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = ctx.fillStyle;
+                ctx.fill();
+                ctx.shadowBlur = 0; // Reset for performance
+            }
+            
+            explode(force) {
+                this.state = 'EXPLODE';
+                // Calculate direction away from center
+                const dx = this.x - hand.x;
+                const dy = this.y - hand.y;
+                const dist = Math.sqrt(dx*dx + dy*dy) || 1; // Avoid divide by zero
+                
+                // Shoot outward
+                const speed = 10 + Math.random() * 20;
+                this.vx = (dx / dist) * speed;
+                this.vy = (dy / dist) * speed;
+            }
         }
 
-        // --- Render Loop ---
+        // Init Particles
+        for(let i=0; i<PARTICLE_COUNT; i++) {
+            particles.push(new Particle());
+        }
+
+        // --- Animation Loop ---
         function animate() {
+            // Trails Effect
+            // Instead of clearing rect completely, we draw a transparent black rect
+            // This creates the "Neon Trail" look
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; 
+            ctx.fillRect(0, 0, width, height);
+
+            // Additive blending makes overlapping lights brighter (Neon look)
+            ctx.globalCompositeOperation = 'lighter';
+
+            // Global Color Cycle
+            globalHue += 1;
+
+            // Logic
+            let activeParticles = 0;
+            
+            // Check Explosion Trigger
+            if (hand.wasPinching && !hand.pinching && hand.active) {
+                // BOOM
+                particles.forEach(p => p.explode());
+                // Screen shake/flash
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0,0,width,height);
+            }
+            hand.wasPinching = hand.pinching;
+
+            // Draw Particles
+            particles.forEach(p => {
+                // If hand is lost, particles drift to center or just stop
+                const tx = hand.active ? hand.x : width/2;
+                const ty = hand.active ? hand.y : height/2;
+                
+                p.update(tx, ty, hand.pinching);
+                p.draw(ctx);
+            });
+            
+            // Draw Core (The "Nucleus")
+            if (hand.active) {
+                const coreSize = hand.pinching ? 15 : 8;
+                const shake = hand.pinching ? (Math.random() - 0.5) * 5 : 0;
+                
+                ctx.beginPath();
+                ctx.arc(hand.x + shake, hand.y + shake, coreSize, 0, Math.PI * 2);
+                ctx.fillStyle = '#fff';
+                ctx.fill();
+                
+                // Core Glow
+                ctx.shadowBlur = hand.pinching ? 40 : 20;
+                ctx.shadowColor = hand.pinching ? '#f00' : '#0ff';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
             requestAnimationFrame(animate);
-            updateParticles();
-            renderer.render(scene, camera);
         }
         animate();
 
-        // --- Resize ---
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
 
-
-        // --- MediaPipe Logic ---
+        // --- MediaPipe Hand Tracking ---
+        
         function onResults(results) {
-            // Loader logic
-            if (loader.style.opacity !== '0') {
-                loaderBar.style.width = '100%';
-                setTimeout(() => {
-                    loader.style.opacity = '0';
-                    setTimeout(() => loader.style.display = 'none', 500);
-                }, 500);
+            // Remove Loader
+            if(loader.style.opacity !== '0') {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 500);
             }
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
                 const index = landmarks[8];
                 const thumb = landmarks[4];
-                const wrist = landmarks[0];
 
-                // Update Hand Position (Smooth lerp)
-                // Note: MediaPipe x is normalized [0,1]. Flip X for mirror effect.
-                const targetHandX = 1 - index.x;
-                const targetHandY = index.y;
+                // Smooth Tracking
+                const targetX = (1 - index.x) * width; // Mirror X
+                const targetY = index.y * height;
 
-                state.handX = state.handX + (targetHandX - state.handX) * 0.3;
-                state.handY = state.handY + (targetHandY - state.handY) * 0.3;
-                state.handActive = true;
+                hand.x += (targetX - hand.x) * 0.4; // Smooth lerp
+                hand.y += (targetY - hand.y) * 0.4;
+                hand.active = true;
 
-                // Pinch Detection
-                const pinchDist = Math.hypot(index.x - thumb.x, index.y - thumb.y);
-                state.isPinching = pinchDist < 0.05;
+                // Pinch Calculation
+                const dx = index.x - thumb.x;
+                const dy = index.y - thumb.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                hand.pinching = dist < 0.05; // Threshold
 
-                // UI Update
-                if (state.isPinching) {
-                    statusText.textContent = "CHARGING SINGULARITY";
-                    statusDot.className = "w-2 h-2 rounded-full bg-white animate-ping";
-                    statusBadge.style.borderColor = "#ff0055";
-                    statusBadge.style.color = "#ff0055";
-                    statusBadge.style.boxShadow = "0 0 30px #ff0055";
+                // Update UI
+                statusBadge.textContent = "ATOM ACTIVE";
+                statusBadge.style.color = "#0f0";
+                statusBadge.style.borderColor = "#0f0";
+                statusBadge.style.boxShadow = "0 0 15px rgba(0,255,0,0.3)";
+
+                if (hand.pinching) {
+                    energyBadge.textContent = "CRITICAL MASS";
+                    energyBadge.style.color = "#fff";
+                    energyBadge.style.backgroundColor = "#f00";
+                    energyBadge.style.borderColor = "#f00";
                 } else {
-                    statusText.textContent = "VORTEX ACTIVE";
-                    statusDot.className = "w-2 h-2 rounded-full bg-cyan-400";
-                    statusBadge.style.borderColor = "rgba(0,255,204,0.5)";
-                    statusBadge.style.color = "#00ffcc";
-                    statusBadge.style.boxShadow = "0 0 20px rgba(0,255,204,0.2)";
+                    energyBadge.textContent = "STABLE";
+                    energyBadge.style.color = "#0ff";
+                    energyBadge.style.backgroundColor = "transparent";
+                    energyBadge.style.borderColor = "#0ff";
                 }
 
             } else {
-                state.handActive = false;
-                statusText.textContent = "SEARCHING FOR HAND";
-                statusDot.className = "w-2 h-2 rounded-full bg-red-500 animate-pulse";
-                statusBadge.style.borderColor = "rgba(255,255,255,0.2)";
-                statusBadge.style.color = "#888";
+                hand.active = false;
+                statusBadge.textContent = "NO HAND";
+                statusBadge.style.color = "#555";
+                statusBadge.style.borderColor = "#333";
                 statusBadge.style.boxShadow = "none";
+                energyBadge.textContent = "---";
             }
         }
 
@@ -441,13 +408,13 @@
         hands.setOptions({
             maxNumHands: 1,
             modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
         });
-
+        
         hands.onResults(onResults);
 
-        const cameraModule = new Camera(videoElement, {
+        const camera = new Camera(videoElement, {
             onFrame: async () => {
                 await hands.send({image: videoElement});
             },
@@ -460,7 +427,7 @@
             if(videoElement.srcObject) previewVideo.srcObject = videoElement.srcObject;
         });
 
-        cameraModule.start();
+        camera.start();
 
     </script>
 </body>
