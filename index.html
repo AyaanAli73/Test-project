@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stark Tech Bright</title>
+    <title>Smooth Stark Tech</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; }
         #c { width: 100vw; height: 100vh; display: block; }
         
-        /* HUD UI */
+        /* Minimal HUD */
         .hud {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; padding: 20px; box-sizing: border-box;
@@ -16,39 +16,28 @@
         
         #status-display {
             position: absolute; top: 40px; left: 30px;
-            font-size: 20px; font-weight: bold; color: #00ffff;
-            text-shadow: 0 0 15px #00ffff; border-left: 4px solid #00ffff;
-            padding-left: 15px;
-            background: rgba(0, 0, 0, 0.5); /* Readable text bg */
-            padding-right: 10px;
-            border-radius: 0 5px 5px 0;
+            font-size: 18px; font-weight: bold; color: rgba(0, 255, 255, 0.8);
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            letter-spacing: 2px;
         }
 
-        #gesture-icon { font-size: 30px; display: inline-block; vertical-align: middle; margin-right: 10px; }
-        #status-text { vertical-align: middle; }
-
-        /* Camera Feed - Ab full visible hai */
+        /* Camera Preview */
         .video-container {
             position: absolute; bottom: 30px; right: 30px;
-            width: 140px; height: 105px;
-            border: 2px solid #333; border-radius: 8px;
-            overflow: hidden; 
-            opacity: 1.0; /* Full visibility */
-            background: #111;
-            z-index: 100;
-            transition: border-color 0.3s, box-shadow 0.3s;
+            width: 120px; height: 90px;
+            border: 1px solid #333; border-radius: 12px;
+            overflow: hidden; opacity: 0.8; background: #000;
+            transition: all 0.5s ease;
         }
-        .video-active { border-color: #00ffff; box-shadow: 0 0 20px #00ffff; }
+        .video-active { border-color: #00ffff; box-shadow: 0 0 20px rgba(0,255,255,0.2); }
         #input_video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 
         #loader {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            color: #fff; background: rgba(0, 20, 40, 0.9);
-            padding: 30px; border: 2px solid #00ffff;
-            box-shadow: 0 0 50px rgba(0,255,255,0.4);
-            text-align: center; font-family: monospace; z-index: 50;
-            border-radius: 12px;
+            color: #fff; background: rgba(0,0,0,0.8);
+            padding: 20px; border: 1px solid #00ffff;
+            border-radius: 8px; text-align: center; font-family: monospace;
         }
     </style>
 
@@ -62,13 +51,10 @@
 </head>
 <body>
 
-    <div id="loader">SYSTEM INITIALIZING...<br><small>Camera Access Required</small></div>
+    <div id="loader">INITIALIZING CORE...<br><small>Allow Camera Access</small></div>
     
     <div class="hud">
-        <div id="status-display">
-            <span id="gesture-icon">⛔</span>
-            <span id="status-text">WAITING FOR HAND</span>
-        </div>
+        <div id="status-display">SYSTEM ONLINE</div>
     </div>
 
     <div class="video-container" id="vid-cont">
@@ -86,41 +72,27 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
         const scene = new THREE.Scene();
-        // Fog ko bohot kam kar diya hai (0.005 instead of 0.02)
-        scene.fog = new THREE.FogExp2(0x000000, 0.005); 
+        scene.fog = new THREE.FogExp2(0x000000, 0.002); // Very light fog
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
         camera.position.z = 6;
 
-        // --- 2. BRIGHTER PARTICLES & CORE ---
-        
-        // Inner Core (Visible Structure)
-        const coreGeo = new THREE.IcosahedronGeometry(1.5, 1);
-        const coreMat = new THREE.MeshBasicMaterial({ 
-            color: 0x00ffff, 
-            wireframe: true, 
-            transparent: true, 
-            opacity: 0.2 // Slightly more visible
-        });
-        const core = new THREE.Mesh(coreGeo, coreMat);
-        scene.add(core);
-
-        // Particle System
-        const count = 3000;
+        // --- 2. PARTICLES ONLY (No Inner Core) ---
+        const count = 4000;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(count * 3);
         const homes = new Float32Array(count * 3);
         const velocities = new Float32Array(count * 3);
         const colors = new Float32Array(count * 3);
 
-        const cBlue = new THREE.Color(0x00ffff); // Cyan
-        const cRed = new THREE.Color(0xff3355);  // Bright Red
+        const cBlue = new THREE.Color(0x00ffff);
+        const cRed = new THREE.Color(0xff2244);
         const cWhite = new THREE.Color(0xffffff);
 
         for(let i=0; i<count; i++) {
             const i3 = i*3;
             // Sphere Shape
-            const r = 2.0 + Math.random() * 0.5;
+            const r = 2.5 + Math.random() * 0.5;
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos((Math.random() * 2) - 1);
             
@@ -131,49 +103,44 @@
             homes[i3] = x; homes[i3+1] = y; homes[i3+2] = z;
             positions[i3] = x; positions[i3+1] = y; positions[i3+2] = z;
             
-            // Start Blue
+            // Initial Blue Color
             colors[i3] = cBlue.r; colors[i3+1] = cBlue.g; colors[i3+2] = cBlue.b;
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-        // Create Glow Texture
+        // Soft Glow Texture
         const cvs = document.createElement('canvas'); cvs.width=32; cvs.height=32;
         const ctx = cvs.getContext('2d');
         const grd = ctx.createRadialGradient(16,16,0,16,16,16);
         grd.addColorStop(0,'rgba(255,255,255,1)'); 
-        grd.addColorStop(0.4,'rgba(255,255,255,0.5)'); 
+        grd.addColorStop(0.2,'rgba(200,255,255,0.4)'); 
         grd.addColorStop(1,'rgba(0,0,0,0)');
         ctx.fillStyle=grd; ctx.fillRect(0,0,32,32);
         const tex = new THREE.Texture(cvs); tex.needsUpdate=true;
 
         const mat = new THREE.PointsMaterial({
-            size: 0.15, // Increased size for brightness
-            map: tex, 
-            vertexColors: true, 
-            transparent: true, 
-            opacity: 1.0, // Full opacity
-            blending: THREE.AdditiveBlending, 
-            depthWrite: false
+            size: 0.12, map: tex, vertexColors: true, 
+            transparent: true, opacity: 0.9, 
+            blending: THREE.AdditiveBlending, depthWrite: false
         });
         const particles = new THREE.Points(geometry, mat);
         scene.add(particles);
 
-
-        // --- 3. SYSTEM STATE ---
+        // --- 3. LOGIC STATE ---
         let state = {
             active: false,
-            mode: 'IDLE', // IDLE, FIST, OPEN, EXPLODE
+            mode: 'IDLE', // IDLE, CHARGING, EXPLODED
             rotX: 0, rotY: 0,
-            explodeTimer: 0
+            targetRotX: 0, targetRotY: 0,
+            explodeForce: 0
         };
 
-        const statusText = document.getElementById('status-text');
-        const gestureIcon = document.getElementById('gesture-icon');
+        const statusDisplay = document.getElementById('status-display');
         const vidCont = document.getElementById('vid-cont');
 
-        // --- 4. HAND TRACKING (STABLE) ---
+        // --- 4. HAND TRACKING ---
         function onResults(results) {
             document.getElementById('loader').style.display = 'none';
 
@@ -183,36 +150,38 @@
 
                 const lm = results.multiHandLandmarks[0];
 
-                // Rotation
-                state.rotY = (lm[9].x - 0.5) * 6; 
-                state.rotX = (lm[9].y - 0.5) * 6;
+                // Smooth Rotation Targets
+                state.targetRotY = (lm[9].x - 0.5) * 4; 
+                state.targetRotX = (lm[9].y - 0.5) * 4;
 
-                // Fist Detection (Robust)
+                // Fist Detection
                 const wrist = lm[0];
                 const palmSize = Math.hypot(lm[9].x - wrist.x, lm[9].y - wrist.y);
                 const tips = [8, 12, 16, 20];
                 let folded = 0;
-                
                 tips.forEach(i => {
-                    if (Math.hypot(lm[i].x - wrist.x, lm[i].y - wrist.y) < palmSize * 1.2) folded++;
+                    if (Math.hypot(lm[i].x - wrist.x, lm[i].y - wrist.y) < palmSize * 1.3) folded++;
                 });
                 
                 const isFist = folded >= 3;
 
-                // Logic
-                if (state.explodeTimer > 0) {
-                    // Exploding...
-                } else if (isFist) {
-                    state.mode = 'FIST';
-                    updateUI('⚡', 'CHARGING...', '#ff3355');
+                // State Machine
+                if (isFist) {
+                    state.mode = 'CHARGING';
+                    statusDisplay.innerText = "⚡ ENERGY BUILDUP";
+                    statusDisplay.style.color = "#ff2244";
+                    state.explodeForce = 0; // Reset explosion
                 } else {
-                    if (state.mode === 'FIST') {
-                        state.mode = 'EXPLODE';
-                        state.explodeTimer = 0.8;
-                        updateUI('💥', 'BLAST!', '#ffffff');
-                    } else {
-                        state.mode = 'OPEN';
-                        updateUI('👋', 'ACTIVE', '#00ffff');
+                    if (state.mode === 'CHARGING') {
+                        // Released Fist -> Trigger Explosion
+                        state.mode = 'EXPLODED';
+                        state.explodeForce = 1.0; // Max explosion force
+                        statusDisplay.innerText = "💥 DISCHARGE";
+                        statusDisplay.style.color = "#ffffff";
+                    } else if (state.mode !== 'EXPLODED') {
+                        state.mode = 'IDLE'; // Normal floating
+                        statusDisplay.innerText = "👋 ACTIVE CONTROL";
+                        statusDisplay.style.color = "#00ffff";
                     }
                 }
 
@@ -220,29 +189,21 @@
                 state.active = false;
                 vidCont.classList.remove('video-active');
                 
-                if (state.explodeTimer <= 0) {
+                // If particles are calm, show standby
+                if (state.explodeForce < 0.1 && state.mode !== 'CHARGING') {
                     state.mode = 'IDLE';
-                    updateUI('⛔', 'NO HAND', '#888888');
+                    statusDisplay.innerText = "SYSTEM STANDBY";
+                    statusDisplay.style.color = "#555";
                 }
             }
-        }
-
-        function updateUI(icon, text, color) {
-            gestureIcon.innerText = icon;
-            statusText.innerText = text;
-            statusText.style.color = color;
-            statusText.style.textShadow = `0 0 15px ${color}`;
-            const display = document.getElementById('status-display');
-            display.style.borderLeftColor = color;
-            display.style.boxShadow = `0 0 10px ${color}22`; // faint glow bg
         }
 
         const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
         hands.setOptions({ 
             maxNumHands: 1, 
             modelComplexity: 1, 
-            minDetectionConfidence: 0.65, 
-            minTrackingConfidence: 0.65 
+            minDetectionConfidence: 0.7, 
+            minTrackingConfidence: 0.7 
         });
         hands.onResults(onResults);
 
@@ -254,90 +215,119 @@
         cameraUtils.start();
 
 
-        // --- 5. ANIMATION LOOP ---
+        // --- 5. PHYSICS & ANIMATION ---
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
-            const delta = Math.min(clock.getDelta(), 0.1);
+            const delta = Math.min(clock.getDelta(), 0.1); // Time step
 
-            if (state.explodeTimer > 0) state.explodeTimer -= delta;
-
-            // Rotation
+            // Smooth Rotation (Lerp) - prevents flickering
             if (state.active) {
-                particles.rotation.y += (state.rotX - particles.rotation.y) * 0.1;
-                particles.rotation.x += (state.rotY - particles.rotation.x) * 0.1;
+                state.rotX += (state.targetRotX - state.rotX) * 0.08;
+                state.rotY += (state.targetRotY - state.rotY) * 0.08;
             } else {
-                particles.rotation.y += 0.005; // Gentle idle spin
-                particles.rotation.x *= 0.95; // Reset tilt
+                // Auto rotate when idle
+                state.rotX *= 0.95; // Return to level
+                state.rotY += 0.002; // Slow spin
             }
-            core.rotation.copy(particles.rotation);
+            particles.rotation.x = state.rotX;
+            particles.rotation.y = state.rotY;
 
-            // Particles
+            // Explosion Decay
+            if (state.mode === 'EXPLODED') {
+                // Force fades out slowly
+                state.explodeForce *= 0.96; 
+                if (state.explodeForce < 0.01) state.mode = 'IDLE';
+            }
+
+            // Particle Physics Loop
             const pos = geometry.attributes.position.array;
             const col = geometry.attributes.color.array;
 
-            const friction = 0.92;
-            const explodePower = 30.0;
-            const returnPower = state.active ? 5.0 : 2.0; // Slower return when idle (smooth)
+            // Physics params
+            const speed = 3.0;
+            const returnStrength = state.active ? 2.5 : 0.8; // Return slower when idle
 
             for(let i=0; i<count; i++) {
                 const i3 = i*3;
                 let px = pos[i3], py = pos[i3+1], pz = pos[i3+2];
-                let vx = velocities[i3], vy = velocities[i3+1], vz = velocities[i3+2];
                 let hx = homes[i3], hy = homes[i3+1], hz = homes[i3+2];
+                let vx = velocities[i3], vy = velocities[i3+1], vz = velocities[i3+2];
 
-                // Physics Forces
-                if (state.explodeTimer > 0) {
-                    // EXPLODE
-                    const len = Math.sqrt(px*px+py*py+pz*pz) || 1;
-                    vx += (px/len) * explodePower * delta * Math.random();
-                    vy += (py/len) * explodePower * delta * Math.random();
-                    vz += (pz/len) * explodePower * delta * Math.random();
+                // 1. Logic Selection
+                if (state.mode === 'EXPLODED') {
+                    // SMOOTH EXPLOSION
+                    // Move away from center
+                    // We simply add velocity outwards based on current explodeForce
+                    const len = Math.sqrt(px*px + py*py + pz*pz) || 1;
+                    const blast = 15.0 * state.explodeForce * delta;
                     
-                    col[i3] = 1; col[i3+1] = 1; col[i3+2] = 1; // White flash
-
-                } else if (state.mode === 'FIST') {
-                    // CHARGE (Vibrate + Red)
-                    const dx = hx-px, dy = hy-py, dz = hz-pz;
-                    vx += dx * returnPower * delta;
-                    vy += dy * returnPower * delta;
-                    vz += dz * returnPower * delta;
+                    vx += (px/len) * blast * (0.5 + Math.random());
+                    vy += (py/len) * blast * (0.5 + Math.random());
+                    vz += (pz/len) * blast * (0.5 + Math.random());
                     
-                    // Jitter
-                    vx += (Math.random()-0.5)*0.5;
-                    vy += (Math.random()-0.5)*0.5;
-                    vz += (Math.random()-0.5)*0.5;
+                    // Flash White
+                    col[i3] = THREE.MathUtils.lerp(col[i3], 1.0, 0.2); 
+                    col[i3+1] = THREE.MathUtils.lerp(col[i3+1], 1.0, 0.2);
+                    col[i3+2] = THREE.MathUtils.lerp(col[i3+2], 1.0, 0.2);
 
-                    // Color -> Red
-                    col[i3] += (cRed.r - col[i3]) * 0.15;
-                    col[i3+1] += (cRed.g - col[i3+1]) * 0.15;
-                    col[i3+2] += (cRed.b - col[i3+2]) * 0.15;
+                } else if (state.mode === 'CHARGING') {
+                    // GATHER & VIBRATE
+                    // Pull strongly to center
+                    const dx = hx - px;
+                    const dy = hy - py;
+                    const dz = hz - pz;
+                    
+                    vx += dx * 5.0 * delta;
+                    vy += dy * 5.0 * delta;
+                    vz += dz * 5.0 * delta;
+
+                    // Add jitter
+                    vx += (Math.random()-0.5) * 0.3;
+                    vy += (Math.random()-0.5) * 0.3;
+                    vz += (Math.random()-0.5) * 0.3;
+
+                    // Turn Red
+                    col[i3] = THREE.MathUtils.lerp(col[i3], cRed.r, 0.1); 
+                    col[i3+1] = THREE.MathUtils.lerp(col[i3+1], cRed.g, 0.1);
+                    col[i3+2] = THREE.MathUtils.lerp(col[i3+2], cRed.b, 0.1);
 
                 } else {
-                    // NORMAL (Return + Blue)
-                    const dx = hx-px, dy = hy-py, dz = hz-pz;
-                    vx += dx * returnPower * delta;
-                    vy += dy * returnPower * delta;
-                    vz += dz * returnPower * delta;
+                    // IDLE / RETURN
+                    // Gentle spring force to home
+                    const dx = hx - px;
+                    const dy = hy - py;
+                    const dz = hz - pz;
 
-                    // Color -> Blue
-                    col[i3] += (cBlue.r - col[i3]) * 0.05;
-                    col[i3+1] += (cBlue.g - col[i3+1]) * 0.05;
-                    col[i3+2] += (cBlue.b - col[i3+2]) * 0.05;
+                    vx += dx * returnStrength * delta;
+                    vy += dy * returnStrength * delta;
+                    vz += dz * returnStrength * delta;
+
+                    // Turn Blue
+                    col[i3] = THREE.MathUtils.lerp(col[i3], cBlue.r, 0.05); 
+                    col[i3+1] = THREE.MathUtils.lerp(col[i3+1], cBlue.g, 0.05);
+                    col[i3+2] = THREE.MathUtils.lerp(col[i3+2], cBlue.b, 0.05);
                 }
 
-                vx *= friction; vy *= friction; vz *= friction;
-                pos[i3] += vx; pos[i3+1] += vy; pos[i3+2] += vz;
-                velocities[i3] = vx; velocities[i3+1] = vy; velocities[i3+2] = vz;
+                // Drag / Friction (Crucial for smoothness)
+                vx *= 0.92;
+                vy *= 0.92;
+                vz *= 0.92;
+
+                // Update Pos
+                pos[i3] += vx;
+                pos[i3+1] += vy;
+                pos[i3+2] += vz;
+
+                // Store Velocity
+                velocities[i3] = vx;
+                velocities[i3+1] = vy;
+                velocities[i3+2] = vz;
             }
 
             geometry.attributes.position.needsUpdate = true;
             geometry.attributes.color.needsUpdate = true;
-            
-            // Core breathing
-            const scale = state.mode === 'FIST' ? 0.8 : 1.0;
-            core.scale.setScalar(scale + Math.sin(clock.elapsedTime*3)*0.03);
 
             renderer.render(scene, camera);
         }
