@@ -3,58 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stark Tech: Ultimate Physics</title>
+    <title>Telekinesis Physics</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #020202; font-family: 'Courier New', monospace; }
-        #c { width: 100vw; height: 100vh; display: block; position: absolute; top: 0; left: 0; z-index: 1; }
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        
+        #c { width: 100vw; height: 100vh; display: block; }
 
-        /* HUD Layer */
-        .hud {
+        /* Start Screen */
+        #overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 10;
+            background: rgba(0,0,0,0.9); z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
-
-        .status-panel {
-            position: absolute; top: 20px; left: 20px;
-            border-left: 3px solid #00ffff;
-            padding-left: 15px;
-            background: linear-gradient(90deg, rgba(0,20,30,0.6), transparent);
+        
+        button {
+            background: transparent; color: #ff0055; font-size: 24px; font-weight: bold;
+            padding: 15px 40px; border: 3px solid #ff0055; border-radius: 8px;
+            cursor: pointer; box-shadow: 0 0 20px rgba(255,0,85,0.4);
+            text-transform: uppercase; transition: 0.2s;
         }
+        button:hover { background: #ff0055; color: white; box-shadow: 0 0 40px rgba(255,0,85,0.8); }
 
-        #sys-header { color: #00ffff; font-size: 12px; letter-spacing: 2px; }
-        #sys-text { color: #fff; font-size: 24px; font-weight: bold; text-shadow: 0 0 20px cyan; margin-top: 5px; }
+        /* HUD */
+        .hud { position: absolute; top: 20px; left: 20px; pointer-events: none; z-index: 10; }
+        .hud-text { color: white; font-size: 18px; text-shadow: 0 0 10px #ff0055; font-weight: bold; }
+        .hud-sub { color: #888; font-size: 12px; margin-top: 5px; }
 
-        /* Camera Preview (Bottom Right) */
-        .cam-preview {
+        /* Camera Box */
+        .cam-box {
             position: absolute; bottom: 20px; right: 20px;
-            width: 100px; height: 75px;
-            border: 1px solid #333; border-radius: 6px;
-            background: #000; overflow: hidden; z-index: 20;
-            opacity: 0.7; transition: 0.3s;
+            width: 100px; height: 75px; background: #111;
+            border: 2px solid #333; border-radius: 8px; opacity: 0; transition: 0.5s;
+            overflow: hidden;
         }
-        .cam-active { border-color: #00ffff; box-shadow: 0 0 15px rgba(0,255,255,0.2); opacity: 1; }
+        .cam-active { opacity: 0.8; border-color: #ff0055; }
         #input_video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 
     </style>
 
-    <!-- 1. Imports -->
+    <!-- Import Map: Three.js + Cannon-es (Physics Engine) -->
     <script type="importmap">
-        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+            }
+        }
     </script>
+    
+    <!-- MediaPipe -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <div class="hud">
-        <div class="status-panel">
-            <div id="sys-header">STARK INDUSTRIES OS</div>
-            <div id="sys-text">INITIALIZING...</div>
-        </div>
+    <div id="overlay">
+        <h1 style="color:white; margin-bottom: 20px; text-shadow: 0 0 10px #ff0055;">GRAVITY ROOM</h1>
+        <button id="btn-start">ACTIVATE PHYSICS</button>
+        <p style="color:#aaa; margin-top:15px;">🖐 Move to Push &nbsp;&bull;&nbsp; 👌 Pinch to Pull</p>
     </div>
 
-    <div class="cam-preview" id="cam-box">
+    <div class="hud">
+        <div class="hud-text" id="status-text">PHYSICS: OFF</div>
+        <div class="hud-sub">INTERACTIVE DEMO</div>
+    </div>
+
+    <div class="cam-box" id="cam-ui">
         <video id="input_video" playsinline webkit-playsinline></video>
     </div>
 
@@ -62,308 +77,262 @@
 
     <script type="module">
         import * as THREE from 'three';
+        import * as CANNON from 'cannon-es';
 
-        // --- 1. SCENE SETUP ---
+        // --- 1. SCENE & PHYSICS SETUP ---
         const canvas = document.querySelector('#c');
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
 
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020202, 0.002);
+        scene.background = new THREE.Color(0x101010);
+        scene.fog = new THREE.Fog(0x101010, 10, 50);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.z = 7;
+        // Physics World
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0); // Normal Earth Gravity
+        world.broadphase = new CANNON.NaiveBroadphase();
+        world.solver.iterations = 10;
 
-        // --- 2. PARTICLE SYSTEM GENERATION ---
-        const count = 3500;
-        const geometry = new THREE.BufferGeometry();
+        // Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 5, 12);
+        camera.lookAt(0, 2, 0);
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
         
-        const positions = new Float32Array(count * 3);
-        const velocities = new Float32Array(count * 3);
-        const colors = new Float32Array(count * 3);
-        
-        // Target shapes
-        const sphereTarget = new Float32Array(count * 3);
-        const ringTarget = new Float32Array(count * 3);
+        const spotLight = new THREE.SpotLight(0xff0055, 100);
+        spotLight.position.set(0, 10, 0);
+        spotLight.angle = Math.PI / 6;
+        spotLight.penumbra = 1;
+        scene.add(spotLight);
 
-        const cBlue = new THREE.Color(0x00ffff);
-        const cRed = new THREE.Color(0xff0044);
-        const cGreen = new THREE.Color(0x00ff88);
+        // --- 2. OBJECTS ---
+        const meshes = [];
+        const bodies = [];
 
-        for(let i=0; i<count; i++) {
-            const i3 = i*3;
-            
-            // A. Sphere Shape
-            const r = 2.5 + Math.random() * 0.5;
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos((Math.random() * 2) - 1);
-            
-            sphereTarget[i3] = r * Math.sin(phi) * Math.cos(theta);
-            sphereTarget[i3+1] = r * Math.sin(phi) * Math.sin(theta);
-            sphereTarget[i3+2] = r * Math.cos(phi);
-
-            // B. Ring Shape
-            const ringR = 4.0 + Math.random() * 0.5;
-            const ringTheta = Math.random() * Math.PI * 2;
-            
-            ringTarget[i3] = ringR * Math.cos(ringTheta);
-            ringTarget[i3+1] = (Math.random()-0.5) * 0.5; // Flattened Y
-            ringTarget[i3+2] = ringR * Math.sin(ringTheta);
-
-            // Initial Position = Sphere
-            positions[i3] = sphereTarget[i3];
-            positions[i3+1] = sphereTarget[i3+1];
-            positions[i3+2] = sphereTarget[i3+2];
-
-            // Initial Color
-            colors[i3] = cBlue.r; colors[i3+1] = cBlue.g; colors[i3+2] = cBlue.b;
-        }
-
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-        // Generate Texture Programmatically (No Loading Errors)
-        const cvs = document.createElement('canvas'); cvs.width=32; cvs.height=32;
-        const ctx = cvs.getContext('2d');
-        const grd = ctx.createRadialGradient(16,16,0,16,16,16);
-        grd.addColorStop(0,'rgba(255,255,255,1)');
-        grd.addColorStop(0.2,'rgba(100,255,255,0.6)');
-        grd.addColorStop(1,'rgba(0,0,0,0)');
-        ctx.fillStyle=grd; ctx.fillRect(0,0,32,32);
-        const tex = new THREE.Texture(cvs); tex.needsUpdate=true;
-
-        const mat = new THREE.PointsMaterial({
-            size: 0.15, map: tex, vertexColors: true, 
-            transparent: true, opacity: 0.9, 
-            blending: THREE.AdditiveBlending, depthWrite: false
+        // Material (Neon physics material)
+        const physicsMat = new CANNON.Material('physics');
+        const physicsContact = new CANNON.ContactMaterial(physicsMat, physicsMat, {
+            friction: 0.3,
+            restitution: 0.5 // Bounciness
         });
+        world.addContactMaterial(physicsContact);
 
-        const particles = new THREE.Points(geometry, mat);
-        scene.add(particles);
+        // Helper: Create Box
+        function createBox(x, y, z, color) {
+            const size = 0.8;
+            const halfExtents = new CANNON.Vec3(size/2, size/2, size/2);
 
-        // --- 3. STATE MANAGEMENT ---
-        let state = {
-            handActive: false,
-            mode: 'IDLE', // IDLE, CHARGE, EXPLODE, RING
-            shapeLerp: 0, // 0=Sphere, 1=Ring
-            rotX: 0, rotY: 0,
-            targetRotX: 0, targetRotY: 0,
-            explodeTime: 0
-        };
+            // Physics Body
+            const body = new CANNON.Body({ mass: 1, material: physicsMat });
+            body.addShape(new CANNON.Box(halfExtents));
+            body.position.set(x, y, z);
+            world.addBody(body);
+            bodies.push(body);
 
-        const uiText = document.getElementById('sys-text');
-        const uiPanel = document.querySelector('.status-panel');
-        const camBox = document.getElementById('cam-box');
-
-        function updateUI(text, color) {
-            uiText.innerText = text;
-            uiText.style.color = color;
-            uiText.style.textShadow = `0 0 20px ${color}`;
-            uiPanel.style.borderLeftColor = color;
+            // Visual Mesh
+            const geo = new THREE.BoxGeometry(size, size, size);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: color, roughness: 0.1, metalness: 0.5 
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            meshes.push(mesh);
         }
 
-        updateUI("SYSTEM ONLINE", "#00ffff"); // Show immediately
+        // Create Floor
+        const floorBody = new CANNON.Body({ mass: 0, material: physicsMat }); // Mass 0 = Static
+        floorBody.addShape(new CANNON.Plane());
+        floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+        world.addBody(floorBody);
 
-        // --- 4. MEDIA PIPE HANDS ---
-        function onResults(results) {
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                state.handActive = true;
-                camBox.classList.add('cam-active');
-                const lm = results.multiHandLandmarks[0];
+        const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+        scene.add(gridHelper);
 
-                // Rotation Tracking
-                state.targetRotY = (lm[9].x - 0.5) * 5;
-                state.targetRotX = (lm[9].y - 0.5) * 5;
-
-                // Gesture Recognition
-                const wrist = lm[0];
-                const palmSize = Math.hypot(lm[9].x - wrist.x, lm[9].y - wrist.y);
-                const tips = [8, 12, 16, 20];
-                let openFingers = 0;
-                tips.forEach(t => { 
-                    if(Math.hypot(lm[t].x - wrist.x, lm[t].y - wrist.y) > palmSize * 1.3) openFingers++; 
-                });
-
-                // Logic
-                if (state.mode === 'EXPLODE') {
-                    // Lock interaction during explosion
-                } else if (openFingers === 0) {
-                    state.mode = 'CHARGE';
-                    updateUI("⚡ CHARGING", "#ff0044");
-                } else if (openFingers === 2) {
-                    state.mode = 'RING';
-                    updateUI("🪐 RING MODE", "#00ff88");
-                } else {
-                    if (state.mode === 'CHARGE') {
-                        // Released Fist -> Trigger Explosion
-                        state.mode = 'EXPLODE';
-                        state.explodeTime = Date.now();
-                        updateUI("💥 DETONATION", "#ffffff");
-                        
-                        // Auto-Reform after 1.5s
-                        setTimeout(() => { 
-                            state.mode = 'IDLE'; 
-                            updateUI("🔵 REFORMING", "#00ffff");
-                        }, 1500);
-                    } else {
-                        state.mode = 'IDLE';
-                        updateUI("🔵 ACTIVE", "#00ffff");
-                    }
+        // Create a Stack of Cubes
+        const colors = [0x00ffff, 0xff0055, 0xffff00, 0x00ff00];
+        for(let i=0; i<4; i++) {
+            for(let j=0; j<3; j++) {
+                for(let k=0; k<4; k++) {
+                    createBox(
+                        (i-1.5) + (Math.random()-0.5)*0.1, 
+                        j * 1 + 2, 
+                        (k-1.5) + (Math.random()-0.5)*0.1, 
+                        colors[Math.floor(Math.random()*colors.length)]
+                    );
                 }
-            } else {
-                state.handActive = false;
-                camBox.classList.remove('cam-active');
-                if(state.mode !== 'EXPLODE') updateUI("AUTOPILOT", "#555");
             }
         }
 
-        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-        hands.onResults(onResults);
+        // --- 3. THE HAND "FORCE FIELD" ---
+        // We create a kinematic body (controlled by code, not physics) for the hand
+        const handShape = new CANNON.Sphere(1.2);
+        const handBody = new CANNON.Body({ mass: 0, material: physicsMat }); // Mass 0 = Static/Kinematic
+        handBody.type = CANNON.Body.KINEMATIC; // We will move this manually
+        handBody.addShape(handShape);
+        handBody.position.set(0, -10, 0); // Hide initially
+        world.addBody(handBody);
 
-        const video = document.getElementById('input_video');
-        const cameraUtils = new Camera(video, {
-            onFrame: async () => { await hands.send({image: video}); },
-            width: 480, height: 360, facingMode: 'user'
-        });
-        cameraUtils.start();
+        // Visual for Hand
+        const handMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(1.2, 32, 32),
+            new THREE.MeshBasicMaterial({ 
+                color: 0x00ffff, transparent: true, opacity: 0.3, wireframe: true 
+            })
+        );
+        scene.add(handMesh);
+
+        // Inner core for hand
+        const handCore = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0xffffff })
+        );
+        handMesh.add(handCore);
 
 
-        // --- 5. PHYSICS ENGINE (ARRIVAL BEHAVIOR) ---
-        // This is the "Secret Sauce" for smooth movement without jumping
-        
+        // --- 4. LOGIC & HAND TRACKING ---
+        let state = {
+            active: false,
+            pinching: false,
+            handX: 0, handY: 0,
+            depth: 0 // Z-depth estimation
+        };
+
+        const statusText = document.getElementById('status-text');
+
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                state.active = true;
+                document.getElementById('cam-ui').classList.add('cam-active');
+                
+                const lm = results.multiHandLandmarks[0];
+                
+                // Map screen coordinates (0-1) to 3D world coordinates
+                // X: -5 to 5, Y: 0 to 6
+                const x = (lm[9].x - 0.5) * -12; // Invert X
+                const y = (1.0 - lm[9].y) * 8;
+                
+                // Z depth estimation based on hand size
+                // wrist to middle finger MCP
+                const size = Math.hypot(lm[9].x - lm[0].x, lm[9].y - lm[0].y);
+                const z = (size - 0.2) * 15; // Rough mapping
+                
+                // Smooth movement
+                state.handX += (x - state.handX) * 0.2;
+                state.handY += (y - state.handY) * 0.2;
+                state.depth += (z - state.depth) * 0.2;
+
+                // Update Physics Body Position
+                handBody.position.set(state.handX, state.handY, Math.max(-2, Math.min(4, state.depth)));
+
+                // Pinch Detection (Thumb + Index)
+                const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
+                state.pinching = pinchDist < 0.05;
+
+                if (state.pinching) {
+                    handMesh.material.color.setHex(0xff0055); // Red
+                    statusText.innerText = "MODE: GRAVITY WELL";
+                    statusText.style.color = "#ff0055";
+                } else {
+                    handMesh.material.color.setHex(0x00ffff); // Blue
+                    statusText.innerText = "MODE: REPULSOR";
+                    statusText.style.color = "#00ffff";
+                }
+
+            } else {
+                state.active = false;
+                handBody.position.set(0, -10, 0); // Move collider away
+                statusText.innerText = "SEARCHING...";
+                statusText.style.color = "#888";
+            }
+        }
+
+        async function startSystem() {
+            document.getElementById('overlay').style.display = 'none';
+            
+            const video = document.getElementById('input_video');
+            const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+            
+            hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+            hands.onResults(onResults);
+
+            const cameraUtils = new Camera(video, {
+                onFrame: async () => { await hands.send({image: video}); },
+                width: 480, height: 360, facingMode: 'user'
+            });
+            await cameraUtils.start();
+        }
+
+        document.getElementById('btn-start').addEventListener('click', startSystem);
+
+        // --- 5. ANIMATION LOOP ---
         const clock = new THREE.Clock();
+        const timeStep = 1 / 60;
 
         function animate() {
             requestAnimationFrame(animate);
-            const delta = Math.min(clock.getDelta(), 0.1);
+            const delta = clock.getDelta();
 
-            // 1. Smooth Rotation
-            if (state.handActive) {
-                state.rotX += (state.targetRotX - state.rotX) * 0.1;
-                state.rotY += (state.targetRotY - state.rotY) * 0.1;
-            } else {
-                state.rotX *= 0.95; 
-                state.rotY += 0.003; // Auto spin
+            // Step Physics
+            world.step(timeStep);
+
+            // Sync Visuals with Physics
+            for (let i = 0; i < meshes.length; i++) {
+                meshes[i].position.copy(bodies[i].position);
+                meshes[i].quaternion.copy(bodies[i].quaternion);
             }
-            particles.rotation.x = state.rotX;
-            particles.rotation.y = state.rotY;
 
-            // 2. Shape Morphing
-            const targetShape = (state.mode === 'RING') ? 1.0 : 0.0;
-            state.shapeLerp += (targetShape - state.shapeLerp) * 0.05;
+            // Hand Visual Sync
+            handMesh.position.copy(handBody.position);
+            
+            // Hand Rotation (Spin)
+            handMesh.rotation.y += 0.05;
+            handMesh.rotation.z += 0.02;
 
-            // 3. Particle Loop
-            const pos = geometry.attributes.position.array;
-            const col = geometry.attributes.color.array;
-
-            // Physics Config
-            const maxSpeed = 20.0;
-            const steerForce = 5.0; // Lower = Smoother, Higher = Snappier
-
-            for(let i=0; i<count; i++) {
-                const i3 = i*3;
-                let px = pos[i3], py = pos[i3+1], pz = pos[i3+2];
-                let vx = velocities[i3], vy = velocities[i3+1], vz = velocities[i3+2];
-
-                // Calculate Target Position (Home)
-                // Blend Sphere and Ring based on shapeLerp
-                let hx = sphereTarget[i3] * (1-state.shapeLerp) + ringTarget[i3] * state.shapeLerp;
-                let hy = sphereTarget[i3+1] * (1-state.shapeLerp) + ringTarget[i3+1] * state.shapeLerp;
-                let hz = sphereTarget[i3+2] * (1-state.shapeLerp) + ringTarget[i3+2] * state.shapeLerp;
-
-                // --- BEHAVIOR SELECTION ---
-
-                if (state.mode === 'EXPLODE') {
-                    // EXPLOSION: Simple velocity push outwards
-                    const d = Math.sqrt(px*px + py*py + pz*pz) || 1;
-                    const blast = 60.0 * delta; // Power
-                    
-                    // Only push if close to center
-                    if(d < 10) {
-                        vx += (px/d) * blast;
-                        vy += (py/d) * blast;
-                        vz += (pz/d) * blast;
-                    }
-                    // Flash White
-                    col[i3]=1; col[i3+1]=1; col[i3+2]=1;
-
-                } else if (state.mode === 'CHARGE') {
-                    // CHARGE: TIGHT PULL + JITTER
-                    const dx = hx-px, dy = hy-py, dz = hz-pz;
-                    vx += dx * 5.0 * delta;
-                    vy += dy * 5.0 * delta;
-                    vz += dz * 5.0 * delta;
-                    
-                    // Vibration
-                    vx += (Math.random()-0.5); 
-                    vy += (Math.random()-0.5); 
-                    vz += (Math.random()-0.5);
-
-                    // Red
-                    col[i3] += (cRed.r - col[i3])*0.2;
-                    col[i3+1] += (cRed.g - col[i3+1])*0.2;
-                    col[i3+2] += (cRed.b - col[i3+2])*0.2;
-
+            // --- SPECIAL POWERS ---
+            if (state.active) {
+                if (state.pinching) {
+                    // BLACK HOLE LOGIC: Pull all boxes towards hand
+                    bodies.forEach(body => {
+                        const dx = handBody.position.x - body.position.x;
+                        const dy = handBody.position.y - body.position.y;
+                        const dz = handBody.position.z - body.position.z;
+                        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                        
+                        // Force = Direction * Strength
+                        if (dist > 1) { // Don't pull if inside
+                            const strength = 15 / (dist * dist);
+                            body.applyForce(new CANNON.Vec3(dx*strength, dy*strength, dz*strength), body.position);
+                            // Zero Gravity effect while pulling
+                            body.linearDamping = 0.5;
+                        }
+                    });
                 } else {
-                    // **ARRIVAL BEHAVIOR (The Fix)**
-                    // This creates the smooth "parking" effect
-                    const dx = hx-px, dy = hy-py, dz = hz-pz;
-                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-                    
-                    // If far, move fast. If close, slow down.
-                    let desiredSpeed = maxSpeed;
-                    if (dist < 8.0) {
-                        desiredSpeed = maxSpeed * (dist / 8.0); // Ramp down speed
-                    }
-
-                    const desiredVx = (dx/dist) * desiredSpeed;
-                    const desiredVy = (dy/dist) * desiredSpeed;
-                    const desiredVz = (dz/dist) * desiredSpeed;
-
-                    // Steer towards desired velocity
-                    const steerX = (desiredVx - vx) * steerForce * delta;
-                    const steerY = (desiredVy - vy) * steerForce * delta;
-                    const steerZ = (desiredVz - vz) * steerForce * delta;
-
-                    vx += steerX;
-                    vy += steerY;
-                    vz += steerZ;
-
-                    // Color Mixing
-                    let rT = cBlue.r * (1-state.shapeLerp) + cGreen.r * state.shapeLerp;
-                    let gT = cBlue.g * (1-state.shapeLerp) + cGreen.g * state.shapeLerp;
-                    let bT = cBlue.b * (1-state.shapeLerp) + cGreen.b * state.shapeLerp;
-
-                    col[i3] += (rT - col[i3]) * 0.1;
-                    col[i3+1] += (gT - col[i3+1]) * 0.1;
-                    col[i3+2] += (bT - col[i3+2]) * 0.1;
+                    // REPULSOR LOGIC: Restore Gravity
+                    bodies.forEach(body => {
+                        body.linearDamping = 0.01; // Normal damping
+                    });
                 }
-
-                // Global Friction (Prevents endless drifting)
-                vx *= 0.9;
-                vy *= 0.9;
-                vz *= 0.9;
-
-                // Update
-                pos[i3] += vx * delta;
-                pos[i3+1] += vy * delta;
-                pos[i3+2] += vz * delta;
-
-                velocities[i3] = vx;
-                velocities[i3+1] = vy;
-                velocities[i3+2] = vz;
             }
-
-            geometry.attributes.position.needsUpdate = true;
-            geometry.attributes.color.needsUpdate = true;
 
             renderer.render(scene, camera);
         }
 
-        animate(); // Start immediately
+        animate();
 
+        // Handle Resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
