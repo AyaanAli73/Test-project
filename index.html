@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro Gesture Control - 3D Neural Shape</title>
+    <title>Toon Gesture 3D</title>
     
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -13,25 +14,38 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
-    <!-- Tailwind -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #020205; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        /* Cartoon Background */
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif; }
         
-        /* Mirror video for natural interaction */
+        /* Halftone Pattern Overlay for extra comic feel */
+        body::before {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: radial-gradient(#ffffff 20%, transparent 20%), radial-gradient(#ffffff 20%, transparent 20%);
+            background-color: #4facfe;
+            background-position: 0 0, 10px 10px;
+            background-size: 20px 20px;
+            opacity: 0.1;
+            z-index: -1;
+        }
+
         #input-video { 
             position: absolute; 
             bottom: 20px; 
             right: 20px; 
-            width: 160px; 
-            height: 120px; 
+            width: 150px; 
+            height: 110px; 
             z-index: 10; 
+            border: 4px solid #000;
             border-radius: 10px; 
-            border: 2px solid #333;
+            background: #000;
             transform: scaleX(-1); 
             display: none;
-            opacity: 0.8;
         }
 
         #ui-layer {
@@ -42,67 +56,66 @@
             pointer-events: none;
         }
 
-        .hud-panel {
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            padding: 15px;
-            border-left: 4px solid #00d2ff;
-            border-radius: 4px;
+        .comic-panel {
+            background: #fff;
+            border: 4px solid #000;
+            box-shadow: 8px 8px 0px #000;
+            padding: 20px;
+            border-radius: 15px;
+            transform: rotate(-2deg);
         }
 
-        .status-badge {
+        .comic-badge {
             display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
+            padding: 5px 10px;
+            border: 2px solid #000;
+            border-radius: 8px;
             font-weight: bold;
-            font-size: 0.8rem;
+            font-size: 0.9rem;
             margin-top: 5px;
-            background: #222;
-            color: #888;
+            background: #e0e0e0;
+            color: #555;
             transition: all 0.2s;
         }
 
         .active-badge {
-            background: #00d2ff;
+            background: #FFE135; /* Cartoon Yellow */
             color: #000;
-            box-shadow: 0 0 10px #00d2ff;
+            transform: scale(1.1);
+            box-shadow: 3px 3px 0px #000;
         }
 
         #loader {
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            color: #00d2ff;
+            background: #fff;
+            border: 4px solid #000;
+            box-shadow: 10px 10px 0 #000;
+            padding: 40px;
             text-align: center;
-            background: rgba(0,0,0,0.9);
-            padding: 30px;
-            border: 1px solid #00d2ff;
-            border-radius: 12px;
-            box-shadow: 0 0 30px rgba(0, 210, 255, 0.2);
+            border-radius: 20px;
         }
     </style>
 </head>
 <body>
 
     <div id="ui-layer">
-        <div class="hud-panel">
-            <h1 class="text-2xl font-bold text-white mb-2 tracking-wider">NEBULA ENGINE</h1>
-            <div class="space-y-2 text-sm text-gray-300">
-                <div id="status-fist" class="status-badge">✊ FIST: DRAG</div>
-                <div id="status-open" class="status-badge">✋ OPEN: ROTATE</div>
-                <div id="status-peace" class="status-badge">✌️ VICTORY: ZOOM IN</div>
-                <div id="status-point" class="status-badge">☝️ POINT: ZOOM OUT</div>
-            </div>
-            <div class="mt-4 text-xs text-gray-500 font-mono">
-                LATENCY: <span class="text-green-400">LOW</span> | FPS: 60
+        <div class="comic-panel">
+            <h1 class="text-3xl font-black mb-2 text-black uppercase tracking-tighter">TOON CONTROL</h1>
+            <div class="space-y-2">
+                <div id="status-fist" class="comic-badge">✊ FIST: DRAG</div>
+                <div id="status-open" class="comic-badge">✋ OPEN: ROTATE</div>
+                <div id="status-peace" class="comic-badge">✌️ VICTORY: ZOOM +</div>
+                <div id="status-point" class="comic-badge">☝️ POINT: ZOOM -</div>
             </div>
         </div>
     </div>
 
     <div id="loader">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-        <p class="font-bold tracking-widest">SYSTEM INITIALIZING</p>
-        <p class="text-xs text-gray-400 mt-2">Accessing Neural Interface (Webcam)...</p>
+        <h2 class="text-2xl font-black mb-2">LOADING...</h2>
+        <p class="text-sm font-bold">Warming up Toon Shaders</p>
+        <div class="mt-4 w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin mx-auto"></div>
     </div>
 
     <video id="input-video" playsinline></video>
@@ -110,42 +123,52 @@
     <script>
         // --- SETTINGS ---
         const SETTINGS = {
-            particleCount: 7000,
-            shapeSize: 1.5,
-            initialZoom: 65,
-            minZoom: 20,
-            maxZoom: 120,
-            lerpSpeed: 0.08 // Smoothness factor (lower = smoother/slower)
+            initialZoom: 35,
+            minZoom: 15,
+            maxZoom: 60,
+            lerpSpeed: 0.1,
+            outlineThickness: 0.4
         };
 
         // --- STATE ---
         const state = {
-            mode: 'IDLE', // IDLE, DRAG, ROTATE, ZOOM_IN, ZOOM_OUT
-            handPos: { x: 0, y: 0 }, // Normalized -1 to 1
-            rotation: { x: 0, y: 0 },
-            position: { x: 0, y: 0, z: 0 },
-            zoom: SETTINGS.initialZoom
+            mode: 'IDLE',
+            handPos: { x: 0, y: 0 },
+            zoom: SETTINGS.initialZoom,
+            targetRotation: { x: 0, y: 0 },
+            targetPosition: { x: 0, y: 0 }
         };
 
-        // --- THREE.JS VARIABLES ---
-        let scene, camera, renderer, particleSystem;
-        let clock = new THREE.Clock();
+        // --- THREE.JS ---
+        let scene, camera, renderer, toonMesh, outlineMesh;
+        const clock = new THREE.Clock();
 
-        // --- INITIALIZATION ---
         function init() {
-            // Scene Setup
             scene = new THREE.Scene();
-            scene.fog = new THREE.FogExp2(0x020205, 0.015);
+            // No fog for cartoon look, we want clarity
 
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.z = state.zoom;
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setPixelRatio(window.devicePixelRatio);
             document.body.appendChild(renderer.domElement);
 
-            createNebulaKnot();
+            // --- LIGHTING (Crucial for Toon Effect) ---
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            dirLight.position.set(20, 20, 20);
+            scene.add(dirLight);
+
+            // Add a rim light for extra pop
+            const rimLight = new THREE.DirectionalLight(0xff00ff, 0.5);
+            rimLight.position.set(-20, 0, -10);
+            scene.add(rimLight);
+
+            createToonObject();
             animate();
 
             window.addEventListener('resize', () => {
@@ -155,126 +178,95 @@
             });
         }
 
-        // --- PARTICLE GENERATION (Complex Knot) ---
-        function createNebulaKnot() {
-            const geometry = new THREE.BufferGeometry();
-            const positions = [];
-            const colors = [];
+        function createToonObject() {
+            // 1. Geometry
+            const geometry = new THREE.TorusKnotGeometry(6, 2, 120, 20);
             
-            // Torus Knot Parameters (p=3, q=7 creates a complex weave)
-            const p = 3;
-            const q = 7;
-            const tubeRadius = 0.6;
-            const mainRadius = 12;
+            // 2. Toon Material
+            // We use a gradient map for strict color banding
+            const colors = new Uint8Array([0, 128, 255]); // 3 steps: dark, mid, bright
+            const gradientMap = new THREE.DataTexture(colors, 3, 1, THREE.RedFormat);
+            gradientMap.minFilter = THREE.NearestFilter;
+            gradientMap.magFilter = THREE.NearestFilter;
+            gradientMap.needsUpdate = true;
 
-            const color1 = new THREE.Color(0x00d2ff); // Cyan
-            const color2 = new THREE.Color(0xff00aa); // Magenta
-
-            for (let i = 0; i < SETTINGS.particleCount; i++) {
-                const t = (i / SETTINGS.particleCount) * Math.PI * 2 * 10;
-                
-                // Curve Path
-                const r = Math.cos(q * t) + 2;
-                let x = r * Math.cos(p * t);
-                let y = r * Math.sin(p * t);
-                let z = -Math.sin(q * t);
-
-                // Add volume (tube)
-                const theta = Math.random() * Math.PI * 2;
-                const rad = (Math.random() * 0.5 + 0.5) * tubeRadius;
-                
-                // Simplified normals for tube expansion (adding noise)
-                x = x * mainRadius + Math.cos(theta) * rad;
-                y = y * mainRadius + Math.sin(theta) * rad;
-                z = z * mainRadius + (Math.random()-0.5) * rad * 2;
-
-                positions.push(x, y, z);
-
-                // Gradient Color based on angle
-                const alpha = (i / SETTINGS.particleCount);
-                const color = new THREE.Color().lerpColors(color1, color2, Math.sin(t*0.5)*0.5 + 0.5);
-                colors.push(color.r, color.g, color.b);
-            }
-
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-
-            const material = new THREE.PointsMaterial({
-                size: 0.35,
-                vertexColors: true,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false,
-                transparent: true,
-                opacity: 0.8
+            const material = new THREE.MeshToonMaterial({
+                color: 0xff3366, // Hot Pink
+                gradientMap: gradientMap,
+                side: THREE.FrontSide
             });
 
-            particleSystem = new THREE.Points(geometry, material);
-            scene.add(particleSystem);
+            toonMesh = new THREE.Mesh(geometry, material);
+            scene.add(toonMesh);
+
+            // 3. Outline Effect (Inverted Hull Method)
+            // Clone geometry, scale it up slightly, flip normals/side, make it black
+            const outlineMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x000000, 
+                side: THREE.BackSide 
+            });
+            outlineMesh = new THREE.Mesh(geometry, outlineMaterial);
+            outlineMesh.scale.multiplyScalar(1.03); // Thickness
+            toonMesh.add(outlineMesh); // Add as child so it follows transform
         }
 
-        // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-
             const delta = clock.getDelta();
             const time = clock.getElapsedTime();
 
-            // 1. ZOOM LOGIC
-            // Smoothly interpolate camera Z
+            // 1. Zoom Smoothing
             camera.position.z += (state.zoom - camera.position.z) * SETTINGS.lerpSpeed;
 
-            // 2. ROTATION LOGIC (OPEN HAND)
-            // If in ROTATE mode, we update the target rotation based on hand position
+            // 2. Gesture Logic
+            
+            // ROTATE (Open Hand)
             if (state.mode === 'ROTATE') {
-                // Map hand X (-1 to 1) to rotation speed or absolute angle?
-                // Let's do absolute angle for control
-                const targetRotX = state.handPos.y * 1.5;
-                const targetRotY = state.handPos.x * 1.5;
-                
-                particleSystem.rotation.x += (targetRotX - particleSystem.rotation.x) * SETTINGS.lerpSpeed;
-                particleSystem.rotation.y += (targetRotY - particleSystem.rotation.y) * SETTINGS.lerpSpeed;
+                const rotX = state.handPos.y * 2;
+                const rotY = state.handPos.x * 2;
+                toonMesh.rotation.x += (rotX - toonMesh.rotation.x) * SETTINGS.lerpSpeed;
+                toonMesh.rotation.y += (rotY - toonMesh.rotation.y) * SETTINGS.lerpSpeed;
             } else {
-                // Idle Spin
-                particleSystem.rotation.y += 0.002;
+                // Idle Bounce animation
+                toonMesh.rotation.x += 0.005;
+                toonMesh.rotation.y += 0.01;
+                // Bob up and down
+                toonMesh.position.y += Math.sin(time * 2) * 0.02; 
             }
 
-            // 3. POSITION LOGIC (FIST / DRAG)
+            // DRAG (Fist)
             if (state.mode === 'DRAG') {
-                // Map Hand X/Y to World Position
-                // At z=65, the visible frustum is about width ~70
-                const targetX = state.handPos.x * 30; 
-                const targetY = state.handPos.y * 20;
+                // Map screen space to approx world space
+                // Approx mapping based on zoom level
+                const range = camera.position.z * 0.4; 
+                state.targetPosition.x = state.handPos.x * range;
+                state.targetPosition.y = state.handPos.y * (range * 0.7);
 
-                particleSystem.position.x += (targetX - particleSystem.position.x) * SETTINGS.lerpSpeed;
-                particleSystem.position.y += (targetY - particleSystem.position.y) * SETTINGS.lerpSpeed;
+                toonMesh.position.x += (state.targetPosition.x - toonMesh.position.x) * SETTINGS.lerpSpeed;
+                toonMesh.position.y += (state.targetPosition.y - toonMesh.position.y) * SETTINGS.lerpSpeed;
             } else {
-                // Return to center slowly if not dragging
-                particleSystem.position.x += (0 - particleSystem.position.x) * 0.05;
-                particleSystem.position.y += (0 - particleSystem.position.y) * 0.05;
+                // Return to center (X) but keep bobbing (Y) handled in idle
+                toonMesh.position.x += (0 - toonMesh.position.x) * 0.05;
+                if (state.mode !== 'ROTATE') toonMesh.position.y *= 0.95; // Return Y gently
             }
 
-            // 4. ZOOM CONTROLS
+            // Zoom Control
             if (state.mode === 'ZOOM_IN') {
-                state.zoom = Math.max(state.zoom - 1, SETTINGS.minZoom);
+                state.zoom = Math.max(state.zoom - 0.5, SETTINGS.minZoom);
             } else if (state.mode === 'ZOOM_OUT') {
-                state.zoom = Math.min(state.zoom + 1, SETTINGS.maxZoom);
+                state.zoom = Math.min(state.zoom + 0.5, SETTINGS.maxZoom);
             }
 
-            // 5. Visual "Breathing" Pulse
-            const positions = particleSystem.geometry.attributes.position.array;
-            // Very subtle vertex shake for "electricity" look
-            // (Skipping heavy loop for performance, doing scaling instead)
-            const scale = 1 + Math.sin(time * 2) * 0.02;
-            particleSystem.scale.set(scale, scale, scale);
+            // Comic squash & stretch effect (subtle)
+            const squish = 1 + Math.sin(time * 5) * 0.02;
+            toonMesh.scale.set(squish, 1/squish, squish);
 
             renderer.render(scene, camera);
         }
 
-
-        // --- MEDIAPIPE LOGIC ---
+        // --- MEDIA PIPE & GESTURES ---
         function updateUI(mode) {
-            document.querySelectorAll('.status-badge').forEach(el => el.classList.remove('active-badge'));
-            
+            document.querySelectorAll('.comic-badge').forEach(el => el.classList.remove('active-badge'));
             if(mode === 'DRAG') document.getElementById('status-fist').classList.add('active-badge');
             if(mode === 'ROTATE') document.getElementById('status-open').classList.add('active-badge');
             if(mode === 'ZOOM_IN') document.getElementById('status-peace').classList.add('active-badge');
@@ -288,100 +280,64 @@
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
 
-                // Update Hand Position (Center of palm approx)
-                // Invert X for mirror
+                // Coordinates
                 const x = (1 - lm[9].x) * 2 - 1; 
                 const y = -(lm[9].y * 2 - 1);
-                
-                state.handPos.x = x;
-                state.handPos.y = y;
+                state.handPos = { x, y };
 
-                // --- GESTURE RECOGNITION ---
-                // Count extended fingers
-                const tips = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky
-                const pips = [6, 10, 14, 18]; // Lower joints
-                
-                let extendedCount = 0;
-                
-                // Thumb Check (special case due to angle)
-                // If tip.x is to the right of ip.x (for right hand)... simplified check:
-                // Check distance from pinky base (17) to thumb tip (4) vs pinky base to index base (5)
-                // Actually, simple X check relative to wrist works okay for broad gestures
-                // Let's use a simpler geometry check:
-                const thumbTip = lm[4];
-                const thumbIp = lm[3];
-                const thumbBase = lm[2];
-                // Check if thumb tip is far from palm center
-                if (Math.hypot(thumbTip.x - lm[9].x, thumbTip.y - lm[9].y) > 0.15) extendedCount++;
+                // Gesture Recognition
+                const tips = [8, 12, 16, 20];
+                const pips = [6, 10, 14, 18];
+                let extended = 0;
 
-                // Fingers Check
-                tips.forEach((tipIdx, i) => {
-                    // If tip is higher (lower Y value) than pip, it's extended
-                    // Note: This simple check assumes hand is upright. 
-                    // Better: Distance from wrist
-                    const dTip = Math.hypot(lm[tipIdx].x - lm[0].x, lm[tipIdx].y - lm[0].y);
-                    const dPip = Math.hypot(lm[pips[i]].x - lm[0].x, lm[pips[i]].y - lm[0].y);
-                    if (dTip > dPip) extendedCount++;
+                // Thumb
+                if (Math.hypot(lm[4].x - lm[9].x, lm[4].y - lm[9].y) > 0.15) extended++;
+
+                // Fingers
+                tips.forEach((tip, i) => {
+                    if (lm[tip].y < lm[pips[i]].y) extended++; // Simple height check (works well for upright hand)
                 });
 
-                // Specific Logic for gestures
-                const isIndexExtended = (Math.hypot(lm[8].x - lm[0].x, lm[8].y - lm[0].y) > Math.hypot(lm[6].x - lm[0].x, lm[6].y - lm[0].y));
-                const isMiddleExtended = (Math.hypot(lm[12].x - lm[0].x, lm[12].y - lm[0].y) > Math.hypot(lm[10].x - lm[0].x, lm[10].y - lm[0].y));
-                const isRingExtended = (Math.hypot(lm[16].x - lm[0].x, lm[16].y - lm[0].y) > Math.hypot(lm[14].x - lm[0].x, lm[14].y - lm[0].y));
-                const isPinkyExtended = (Math.hypot(lm[20].x - lm[0].x, lm[20].y - lm[0].y) > Math.hypot(lm[18].x - lm[0].x, lm[18].y - lm[0].y));
+                // Check specific fingers for Victory/Index
+                const indexUp = lm[8].y < lm[6].y;
+                const middleUp = lm[12].y < lm[10].y;
+                const ringUp = lm[16].y < lm[14].y;
+                const pinkyUp = lm[20].y < lm[18].y;
 
-                // DECIDE MODE
-                if (!isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
-                    // 0 Fingers (Thumb doesn't matter much here) -> FIST
-                    state.mode = 'DRAG';
-                } 
-                else if (isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
-                    // Only Index -> POINT
-                    state.mode = 'ZOOM_OUT';
-                }
-                else if (isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended) {
-                    // Index + Middle -> PEACE
-                    state.mode = 'ZOOM_IN';
-                }
-                else if (extendedCount >= 4) {
-                    // All open -> ROTATE
-                    state.mode = 'ROTATE';
-                }
-                else {
+                if (!indexUp && !middleUp && !ringUp && !pinkyUp) {
+                    state.mode = 'DRAG'; // Fist
+                } else if (indexUp && middleUp && !ringUp && !pinkyUp) {
+                    state.mode = 'ZOOM_IN'; // Victory
+                } else if (indexUp && !middleUp && !ringUp && !pinkyUp) {
+                    state.mode = 'ZOOM_OUT'; // Point
+                } else if (extended >= 4) {
+                    state.mode = 'ROTATE'; // Open
+                } else {
                     state.mode = 'IDLE';
                 }
 
             } else {
                 state.mode = 'IDLE';
             }
-            
             updateUI(state.mode);
         }
 
-        // --- SETUP CAMERA ---
-        const hands = new Hands({locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        }});
-
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
         hands.setOptions({
             maxNumHands: 1,
-            modelComplexity: 0, // Lite mode for speed
+            modelComplexity: 0,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
-
         hands.onResults(onResults);
 
         const videoElement = document.getElementById('input-video');
         const cameraFeed = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            width: 320, // Low res input for high FPS processing
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 320,
             height: 240
         });
 
-        // Start
         init();
         cameraFeed.start();
 
