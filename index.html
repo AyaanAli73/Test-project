@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fast Gesture Control - Torus Knot</title>
+    <title>Pro Gesture Control - 3D Neural Shape</title>
     
     <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -17,22 +17,21 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050505; }
-        canvas { display: block; }
+        body { margin: 0; overflow: hidden; background-color: #020205; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         
         /* Mirror video for natural interaction */
         #input-video { 
             position: absolute; 
             bottom: 20px; 
             right: 20px; 
-            width: 120px; 
-            height: 90px; 
+            width: 160px; 
+            height: 120px; 
             z-index: 10; 
-            border-radius: 8px; 
-            opacity: 0.6;
+            border-radius: 10px; 
+            border: 2px solid #333;
             transform: scaleX(-1); 
             display: none;
-            pointer-events: none;
+            opacity: 0.8;
         }
 
         #ui-layer {
@@ -41,346 +40,350 @@
             left: 20px;
             z-index: 20;
             pointer-events: none;
-            font-family: 'Courier New', Courier, monospace;
         }
 
-        .hud-text {
-            color: #00ffcc;
-            text-shadow: 0 0 10px #00ffcc;
+        .hud-panel {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            padding: 15px;
+            border-left: 4px solid #00d2ff;
+            border-radius: 4px;
         }
-        
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.8rem;
+            margin-top: 5px;
+            background: #222;
+            color: #888;
+            transition: all 0.2s;
+        }
+
+        .active-badge {
+            background: #00d2ff;
+            color: #000;
+            box-shadow: 0 0 10px #00d2ff;
+        }
+
         #loader {
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            color: #00ffcc;
-            font-family: sans-serif;
+            color: #00d2ff;
             text-align: center;
-            background: rgba(0,0,0,0.8);
-            padding: 20px;
-            border: 1px solid #00ffcc;
-            border-radius: 8px;
+            background: rgba(0,0,0,0.9);
+            padding: 30px;
+            border: 1px solid #00d2ff;
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(0, 210, 255, 0.2);
         }
     </style>
 </head>
 <body>
 
     <div id="ui-layer">
-        <h1 class="text-2xl font-bold hud-text mb-1">CYBER KNOT</h1>
-        <div class="text-xs text-white opacity-70">
-            LATENCY: <span id="latency-val" class="text-green-400">OPTIMIZED</span><br>
-            MODE: <span id="mode-val" class="text-yellow-400">IDLE</span>
+        <div class="hud-panel">
+            <h1 class="text-2xl font-bold text-white mb-2 tracking-wider">NEBULA ENGINE</h1>
+            <div class="space-y-2 text-sm text-gray-300">
+                <div id="status-fist" class="status-badge">✊ FIST: DRAG</div>
+                <div id="status-open" class="status-badge">✋ OPEN: ROTATE</div>
+                <div id="status-peace" class="status-badge">✌️ VICTORY: ZOOM IN</div>
+                <div id="status-point" class="status-badge">☝️ POINT: ZOOM OUT</div>
+            </div>
+            <div class="mt-4 text-xs text-gray-500 font-mono">
+                LATENCY: <span class="text-green-400">LOW</span> | FPS: 60
+            </div>
         </div>
     </div>
 
     <div id="loader">
-        <p class="animate-pulse">INITIALIZING NEURAL LINK...</p>
-        <p class="text-xs text-gray-400 mt-2">Please allow camera access</p>
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+        <p class="font-bold tracking-widest">SYSTEM INITIALIZING</p>
+        <p class="text-xs text-gray-400 mt-2">Accessing Neural Interface (Webcam)...</p>
     </div>
 
     <video id="input-video" playsinline></video>
     
     <script>
-        // --- CONFIGURATION ---
-        const CONFIG = {
-            particleCount: 8000,
-            shapeSize: 18,
-            tubeSize: 6,
-            responsiveness: 0.15, // Higher = faster, Lower = smoother
-            explosionForce: 2.0
+        // --- SETTINGS ---
+        const SETTINGS = {
+            particleCount: 7000,
+            shapeSize: 1.5,
+            initialZoom: 65,
+            minZoom: 20,
+            maxZoom: 120,
+            lerpSpeed: 0.08 // Smoothness factor (lower = smoother/slower)
         };
 
-        // --- GLOBAL VARIABLES ---
-        let scene, camera, renderer, particles;
-        let targetRotationX = 0;
-        let targetRotationY = 0;
-        let isFist = false;
-        let handPos = new THREE.Vector3(0, 0, 0);
-        
-        // State Machine: 'FORMED', 'COLLAPSING', 'EXPLODING', 'RETURNING'
-        let currentMode = 'FORMED'; 
-        let explosionStartTime = 0;
+        // --- STATE ---
+        const state = {
+            mode: 'IDLE', // IDLE, DRAG, ROTATE, ZOOM_IN, ZOOM_OUT
+            handPos: { x: 0, y: 0 }, // Normalized -1 to 1
+            rotation: { x: 0, y: 0 },
+            position: { x: 0, y: 0, z: 0 },
+            zoom: SETTINGS.initialZoom
+        };
 
-        // --- THREE.JS INIT ---
-        function initThree() {
+        // --- THREE.JS VARIABLES ---
+        let scene, camera, renderer, particleSystem;
+        let clock = new THREE.Clock();
+
+        // --- INITIALIZATION ---
+        function init() {
+            // Scene Setup
             scene = new THREE.Scene();
-            // Dark fog for depth
-            scene.fog = new THREE.FogExp2(0x050505, 0.003);
+            scene.fog = new THREE.FogExp2(0x020205, 0.015);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 80;
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = state.zoom;
 
-            renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio for performance
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             document.body.appendChild(renderer.domElement);
 
-            createParticles();
-            window.addEventListener('resize', onWindowResize, false);
+            createNebulaKnot();
+            animate();
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
         }
 
-        function createParticles() {
+        // --- PARTICLE GENERATION (Complex Knot) ---
+        function createNebulaKnot() {
             const geometry = new THREE.BufferGeometry();
             const positions = [];
-            const targets = []; // Target positions (The Knot Shape)
             const colors = [];
-            const randoms = []; // For noise animation
-
-            // Generate Torus Knot Points
-            // We use a mathematical parametric function for a Torus Knot
-            const p = 3; // Winding loops
-            const q = 4; // Winding loops
             
-            for (let i = 0; i < CONFIG.particleCount; i++) {
-                // Determine position on the tube
-                const t = (i / CONFIG.particleCount) * Math.PI * 2 * 10; // spread along length
+            // Torus Knot Parameters (p=3, q=7 creates a complex weave)
+            const p = 3;
+            const q = 7;
+            const tubeRadius = 0.6;
+            const mainRadius = 12;
+
+            const color1 = new THREE.Color(0x00d2ff); // Cyan
+            const color2 = new THREE.Color(0xff00aa); // Magenta
+
+            for (let i = 0; i < SETTINGS.particleCount; i++) {
+                const t = (i / SETTINGS.particleCount) * Math.PI * 2 * 10;
                 
-                // Torus Knot math
-                // Scale factor
-                const scale = CONFIG.shapeSize; 
-                
-                // Base curve
+                // Curve Path
                 const r = Math.cos(q * t) + 2;
-                let tx = r * Math.cos(p * t);
-                let ty = r * Math.sin(p * t);
-                let tz = -Math.sin(q * t);
+                let x = r * Math.cos(p * t);
+                let y = r * Math.sin(p * t);
+                let z = -Math.sin(q * t);
 
-                // Add "thickness" to the knot (tube volume)
-                // Random angle around the core wire
+                // Add volume (tube)
                 const theta = Math.random() * Math.PI * 2;
-                const tubeR = (Math.random() * 0.5 + 0.5) * CONFIG.tubeSize; // Random thickness
-
-                // Approximate normals (simplified for performance) to push out for tube
-                // Just adding random noise around the core line for the "cloud" look
-                tx = tx * scale + (Math.random()-0.5) * tubeR;
-                ty = ty * scale + (Math.random()-0.5) * tubeR;
-                tz = tz * scale + (Math.random()-0.5) * tubeR;
-
-                // Store Target
-                targets.push(tx, ty, tz);
+                const rad = (Math.random() * 0.5 + 0.5) * tubeRadius;
                 
-                // Start positions (random spawn)
-                positions.push(tx, ty, tz);
+                // Simplified normals for tube expansion (adding noise)
+                x = x * mainRadius + Math.cos(theta) * rad;
+                y = y * mainRadius + Math.sin(theta) * rad;
+                z = z * mainRadius + (Math.random()-0.5) * rad * 2;
 
-                // Colors (Cyan to Purple gradient based on position)
-                const color = new THREE.Color();
-                const hue = (i / CONFIG.particleCount) * 0.2 + 0.5; // Blue/Purple range
-                color.setHSL(hue, 0.8, 0.6);
+                positions.push(x, y, z);
+
+                // Gradient Color based on angle
+                const alpha = (i / SETTINGS.particleCount);
+                const color = new THREE.Color().lerpColors(color1, color2, Math.sin(t*0.5)*0.5 + 0.5);
                 colors.push(color.r, color.g, color.b);
-
-                randoms.push(Math.random());
             }
 
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
             geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-            geometry.userData = { targets: new Float32Array(targets), randoms: new Float32Array(randoms) };
 
             const material = new THREE.PointsMaterial({
-                size: 0.9,
+                size: 0.35,
                 vertexColors: true,
                 blending: THREE.AdditiveBlending,
-                depthTest: false,
+                depthWrite: false,
                 transparent: true,
                 opacity: 0.8
             });
 
-            particles = new THREE.Points(geometry, material);
-            scene.add(particles);
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
         }
 
         // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
 
-            // 1. Smooth Rotation Logic
-            // We interpolate current rotation towards target rotation
-            const smoothing = 0.05; // Lower = smoother, heavier feel
-            particles.rotation.x += (targetRotationX - particles.rotation.x) * smoothing;
-            particles.rotation.y += (targetRotationY - particles.rotation.y) * smoothing;
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
 
-            // 2. Particle Logic based on Mode
-            updateParticles();
+            // 1. ZOOM LOGIC
+            // Smoothly interpolate camera Z
+            camera.position.z += (state.zoom - camera.position.z) * SETTINGS.lerpSpeed;
+
+            // 2. ROTATION LOGIC (OPEN HAND)
+            // If in ROTATE mode, we update the target rotation based on hand position
+            if (state.mode === 'ROTATE') {
+                // Map hand X (-1 to 1) to rotation speed or absolute angle?
+                // Let's do absolute angle for control
+                const targetRotX = state.handPos.y * 1.5;
+                const targetRotY = state.handPos.x * 1.5;
+                
+                particleSystem.rotation.x += (targetRotX - particleSystem.rotation.x) * SETTINGS.lerpSpeed;
+                particleSystem.rotation.y += (targetRotY - particleSystem.rotation.y) * SETTINGS.lerpSpeed;
+            } else {
+                // Idle Spin
+                particleSystem.rotation.y += 0.002;
+            }
+
+            // 3. POSITION LOGIC (FIST / DRAG)
+            if (state.mode === 'DRAG') {
+                // Map Hand X/Y to World Position
+                // At z=65, the visible frustum is about width ~70
+                const targetX = state.handPos.x * 30; 
+                const targetY = state.handPos.y * 20;
+
+                particleSystem.position.x += (targetX - particleSystem.position.x) * SETTINGS.lerpSpeed;
+                particleSystem.position.y += (targetY - particleSystem.position.y) * SETTINGS.lerpSpeed;
+            } else {
+                // Return to center slowly if not dragging
+                particleSystem.position.x += (0 - particleSystem.position.x) * 0.05;
+                particleSystem.position.y += (0 - particleSystem.position.y) * 0.05;
+            }
+
+            // 4. ZOOM CONTROLS
+            if (state.mode === 'ZOOM_IN') {
+                state.zoom = Math.max(state.zoom - 1, SETTINGS.minZoom);
+            } else if (state.mode === 'ZOOM_OUT') {
+                state.zoom = Math.min(state.zoom + 1, SETTINGS.maxZoom);
+            }
+
+            // 5. Visual "Breathing" Pulse
+            const positions = particleSystem.geometry.attributes.position.array;
+            // Very subtle vertex shake for "electricity" look
+            // (Skipping heavy loop for performance, doing scaling instead)
+            const scale = 1 + Math.sin(time * 2) * 0.02;
+            particleSystem.scale.set(scale, scale, scale);
 
             renderer.render(scene, camera);
         }
 
-        function updateParticles() {
-            const positions = particles.geometry.attributes.position.array;
-            const targets = particles.geometry.userData.targets;
-            const randoms = particles.geometry.userData.randoms;
-            const time = Date.now() * 0.001;
 
-            // Logic switch
-            if (isFist && currentMode !== 'EXPLODING') {
-                currentMode = 'COLLAPSING';
-            } else if (!isFist && currentMode === 'COLLAPSING') {
-                currentMode = 'EXPLODING';
-                explosionStartTime = Date.now();
-            }
-
-            // Status Update
-            if (Date.now() - explosionStartTime > 1500 && currentMode === 'EXPLODING') {
-                currentMode = 'RETURNING';
-            }
-            if (currentMode === 'RETURNING') {
-                // Check if mostly returned? simplified: just drift back
-                // We transition to FORMED visually by the lerp below
-                // We can just label it FORMED if we want
-            }
-
-            document.getElementById('mode-val').innerText = currentMode;
-
-            // --- PHYSICS KERNEL ---
-            // Using a simple loop for speed
-            for (let i = 0; i < CONFIG.particleCount; i++) {
-                const i3 = i * 3;
-                let px = positions[i3];
-                let py = positions[i3 + 1];
-                let pz = positions[i3 + 2];
-
-                let tx = targets[i3];
-                let ty = targets[i3 + 1];
-                let tz = targets[i3 + 2];
-
-                if (currentMode === 'COLLAPSING') {
-                    // Suck into hand position
-                    // We map handPos (which is -1 to 1) to world coordinates approx
-                    const hx = handPos.x * 40;
-                    const hy = handPos.y * 30;
-                    
-                    // Move towards hand center rapidly
-                    px += (hx - px) * 0.15;
-                    py += (hy - py) * 0.15;
-                    pz += (-px * 0.5 - pz) * 0.15; // Swirl effect on Z
-
-                    // Add Vortex Spin
-                    const tempX = px;
-                    px = px * Math.cos(0.2) - pz * Math.sin(0.2);
-                    pz = tempX * Math.sin(0.2) + pz * Math.cos(0.2);
-                    
-                } 
-                else if (currentMode === 'EXPLODING') {
-                    // Blast outward from center
-                    const dirX = px - (handPos.x * 40);
-                    const dirY = py - (handPos.y * 30);
-                    const dirZ = pz; // outward z
-                    
-                    // Normalize approximation
-                    const len = Math.sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ) + 0.001;
-                    
-                    px += (dirX / len) * CONFIG.explosionForce * 2;
-                    py += (dirY / len) * CONFIG.explosionForce * 2;
-                    pz += (dirZ / len) * CONFIG.explosionForce * 2;
-
-                } 
-                else { 
-                    // 'RETURNING' or 'FORMED' -> Go to Target Shape
-                    // Apply subtle noise
-                    const noise = Math.sin(time * 2 + randoms[i] * 10) * 0.2;
-                    
-                    // Lerp back to shape
-                    // We use a variable lerp speed. Fast if far away, slow if close
-                    const dist = Math.abs(tx - px) + Math.abs(ty - py) + Math.abs(tz - pz);
-                    const speed = dist > 10 ? 0.08 : 0.04;
-
-                    px += (tx - px) * speed + noise;
-                    py += (ty - py) * speed + noise;
-                    pz += (tz - pz) * speed + noise;
-                }
-
-                positions[i3] = px;
-                positions[i3 + 1] = py;
-                positions[i3 + 2] = pz;
-            }
-
-            particles.geometry.attributes.position.needsUpdate = true;
+        // --- MEDIAPIPE LOGIC ---
+        function updateUI(mode) {
+            document.querySelectorAll('.status-badge').forEach(el => el.classList.remove('active-badge'));
+            
+            if(mode === 'DRAG') document.getElementById('status-fist').classList.add('active-badge');
+            if(mode === 'ROTATE') document.getElementById('status-open').classList.add('active-badge');
+            if(mode === 'ZOOM_IN') document.getElementById('status-peace').classList.add('active-badge');
+            if(mode === 'ZOOM_OUT') document.getElementById('status-point').classList.add('active-badge');
         }
 
-
-        // --- MEDIAPIPE SETUP (OPTIMIZED FOR LOW LATENCY) ---
-        const videoElement = document.getElementById('input-video');
-        
         function onResults(results) {
             document.getElementById('loader').style.display = 'none';
-            videoElement.style.display = 'block';
+            document.getElementById('input-video').style.display = 'block';
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
+                const lm = results.multiHandLandmarks[0];
 
-                // 1. POSITION (Use wrist and middle finger base for stable center)
-                // Invert X for mirror feel
-                const x = (1 - landmarks[9].x) * 2 - 1; 
-                const y = -(landmarks[9].y * 2 - 1);
+                // Update Hand Position (Center of palm approx)
+                // Invert X for mirror
+                const x = (1 - lm[9].x) * 2 - 1; 
+                const y = -(lm[9].y * 2 - 1);
                 
-                // Update global hand pos smoothly
-                handPos.lerp(new THREE.Vector3(x, y, 0), 0.3);
+                state.handPos.x = x;
+                state.handPos.y = y;
 
-                // 2. ROTATION CONTROL (Only if not Fist)
-                if (!isFist) {
-                    // Map hand screen position to rotation angles
-                    // Move hand Left/Right -> Rotate Y
-                    // Move hand Up/Down -> Rotate X
-                    targetRotationY = x * 2; 
-                    targetRotationX = y * 2;
+                // --- GESTURE RECOGNITION ---
+                // Count extended fingers
+                const tips = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky
+                const pips = [6, 10, 14, 18]; // Lower joints
+                
+                let extendedCount = 0;
+                
+                // Thumb Check (special case due to angle)
+                // If tip.x is to the right of ip.x (for right hand)... simplified check:
+                // Check distance from pinky base (17) to thumb tip (4) vs pinky base to index base (5)
+                // Actually, simple X check relative to wrist works okay for broad gestures
+                // Let's use a simpler geometry check:
+                const thumbTip = lm[4];
+                const thumbIp = lm[3];
+                const thumbBase = lm[2];
+                // Check if thumb tip is far from palm center
+                if (Math.hypot(thumbTip.x - lm[9].x, thumbTip.y - lm[9].y) > 0.15) extendedCount++;
+
+                // Fingers Check
+                tips.forEach((tipIdx, i) => {
+                    // If tip is higher (lower Y value) than pip, it's extended
+                    // Note: This simple check assumes hand is upright. 
+                    // Better: Distance from wrist
+                    const dTip = Math.hypot(lm[tipIdx].x - lm[0].x, lm[tipIdx].y - lm[0].y);
+                    const dPip = Math.hypot(lm[pips[i]].x - lm[0].x, lm[pips[i]].y - lm[0].y);
+                    if (dTip > dPip) extendedCount++;
+                });
+
+                // Specific Logic for gestures
+                const isIndexExtended = (Math.hypot(lm[8].x - lm[0].x, lm[8].y - lm[0].y) > Math.hypot(lm[6].x - lm[0].x, lm[6].y - lm[0].y));
+                const isMiddleExtended = (Math.hypot(lm[12].x - lm[0].x, lm[12].y - lm[0].y) > Math.hypot(lm[10].x - lm[0].x, lm[10].y - lm[0].y));
+                const isRingExtended = (Math.hypot(lm[16].x - lm[0].x, lm[16].y - lm[0].y) > Math.hypot(lm[14].x - lm[0].x, lm[14].y - lm[0].y));
+                const isPinkyExtended = (Math.hypot(lm[20].x - lm[0].x, lm[20].y - lm[0].y) > Math.hypot(lm[18].x - lm[0].x, lm[18].y - lm[0].y));
+
+                // DECIDE MODE
+                if (!isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+                    // 0 Fingers (Thumb doesn't matter much here) -> FIST
+                    state.mode = 'DRAG';
+                } 
+                else if (isIndexExtended && !isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+                    // Only Index -> POINT
+                    state.mode = 'ZOOM_OUT';
+                }
+                else if (isIndexExtended && isMiddleExtended && !isRingExtended && !isPinkyExtended) {
+                    // Index + Middle -> PEACE
+                    state.mode = 'ZOOM_IN';
+                }
+                else if (extendedCount >= 4) {
+                    // All open -> ROTATE
+                    state.mode = 'ROTATE';
+                }
+                else {
+                    state.mode = 'IDLE';
                 }
 
-                // 3. GESTURE DETECTION (Fast Euclidian Check)
-                const wrist = landmarks[0];
-                const tip = landmarks[12]; // Middle finger tip
-                const base = landmarks[9]; // Middle finger base
-                
-                // Distance from tip to wrist
-                const openDist = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
-                // Distance from tip to base (knuckle)
-                const curlDist = Math.hypot(tip.x - base.x, tip.y - base.y);
-
-                // If tip is very close to base, it's a fist
-                // Tweaked threshold for responsiveness
-                if (curlDist < 0.1 || openDist < 0.25) {
-                    isFist = true;
-                } else {
-                    isFist = false;
-                }
             } else {
-                // No hand? Auto-rotate slowly
-                targetRotationY += 0.005;
-                isFist = false;
+                state.mode = 'IDLE';
             }
+            
+            updateUI(state.mode);
         }
 
+        // --- SETUP CAMERA ---
         const hands = new Hands({locateFile: (file) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }});
 
-        // LOW LATENCY CONFIGURATION
         hands.setOptions({
             maxNumHands: 1,
-            modelComplexity: 0, // 0 = LITE (Fastest), 1 = FULL
+            modelComplexity: 0, // Lite mode for speed
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
 
         hands.onResults(onResults);
 
+        const videoElement = document.getElementById('input-video');
         const cameraFeed = new Camera(videoElement, {
             onFrame: async () => {
                 await hands.send({image: videoElement});
             },
-            width: 320, // Lower res for faster processing
+            width: 320, // Low res input for high FPS processing
             height: 240
         });
 
-        // Start Everything
-        initThree();
-        cameraFeed.start().then(() => {
-            animate();
-        });
+        // Start
+        init();
+        cameraFeed.start();
 
     </script>
 </body>
