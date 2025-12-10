@@ -2,150 +2,251 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Color Flow</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Hand Tracking 3D Draw</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- MediaPipe Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background-color: #111;
-            touch-action: none; /* Prevents scrolling on mobile while drawing */
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
         }
         canvas {
             display: block;
-            cursor: crosshair;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
         }
-        .toolbar {
-            backdrop-filter: blur(10px);
-            background-color: rgba(0, 0, 0, 0.6);
-            transition: opacity 0.3s ease;
-        }
-        /* Hide toolbar when interacting if needed, but keeping it visible is usually better */
-        
-        input[type=range] {
-            -webkit-appearance: none;
-            background: transparent;
-        }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 16px;
-            width: 16px;
-            border-radius: 50%;
-            background: #ffffff;
-            cursor: pointer;
-            margin-top: -6px;
-            box-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
-        input[type=range]::-webkit-slider-runnable-track {
+        #videoElement {
+            transform: scaleX(-1); /* Mirror the video */
+            object-fit: cover;
             width: 100%;
-            height: 4px;
-            cursor: pointer;
-            background: rgba(255,255,255,0.3);
-            border-radius: 2px;
+            height: 100%;
+            opacity: 0; /* Hidden, we just need the data */
+            position: absolute;
+            pointer-events: none;
         }
+        
+        /* Small preview in corner */
+        .camera-preview {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border-radius: 12px;
+            overflow: hidden;
+            z-index: 50;
+            border: 2px solid rgba(255,255,255,0.2);
+            background: #000;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+        .camera-preview video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            opacity: 0.8;
+        }
+
+        /* Loading Spinner */
+        #loader {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #111;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: opacity 0.5s;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-left-color: #00ffcc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="text-white">
 
-    <!-- Canvas Layer -->
-    <canvas id="canvas"></canvas>
-
-    <!-- UI Overlay -->
-    <div class="fixed top-4 left-4 pointer-events-none select-none opacity-50 text-xs text-gray-400">
-        <p>Speed affects thickness • Drag to draw</p>
+    <!-- Loading Screen -->
+    <div id="loader">
+        <div class="spinner"></div>
+        <h2 class="text-xl font-bold tracking-wider">Starting AI Vision...</h2>
+        <p class="text-gray-400 text-sm mt-2">Please allow camera access</p>
     </div>
 
-    <div class="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-md p-4 rounded-2xl border border-white/10 toolbar flex flex-col gap-3 shadow-2xl">
+    <!-- Main Drawing Canvas -->
+    <canvas id="canvas"></canvas>
+
+    <!-- Source Video (Hidden mostly) -->
+    <video id="videoElement" playsinline></video>
+
+    <!-- Camera PIP Preview -->
+    <div class="camera-preview">
+        <!-- We clone the stream to this video element for the preview -->
+        <video id="previewVideo" playsinline muted autoplay></video>
+    </div>
+
+    <!-- UI Controls -->
+    <div class="fixed top-6 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-2 z-40 pointer-events-none">
+        <div class="bg-black/60 backdrop-blur-md px-6 py-2 rounded-full border border-white/10 shadow-xl flex items-center gap-3">
+            <div id="statusIndicator" class="w-3 h-3 rounded-full bg-red-500 transition-colors"></div>
+            <span id="statusText" class="text-sm font-medium tracking-wide">Looking for hand...</span>
+        </div>
+        <p class="text-xs text-gray-400 bg-black/40 px-3 py-1 rounded-lg">👆 Pinch Index & Thumb to Draw</p>
+    </div>
+
+    <div class="fixed bottom-6 left-6 z-40 flex flex-col gap-4 pointer-events-auto">
         
-        <div class="flex justify-between items-center">
-            <h1 class="text-sm font-bold tracking-wider text-gray-300 uppercase">3D Brush</h1>
-            <div class="flex gap-2">
-                <button id="downloadBtn" class="p-2 rounded-full bg-white/10 hover:bg-white/20 transition text-white" title="Save Image">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-                    </svg>
-                </button>
-                <button id="clearBtn" class="px-4 py-1.5 rounded-full bg-red-500/80 hover:bg-red-500 text-white font-medium text-xs transition shadow-lg shadow-red-500/30">
-                    Clear
-                </button>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-            <!-- Mode Toggle -->
-            <button id="rainbowToggle" class="flex items-center justify-center gap-2 py-2 rounded-lg bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 text-xs font-bold shadow-lg transition transform active:scale-95 border border-white/20">
-                <span>Rainbow Mode</span>
-                <span id="rainbowStatus" class="w-2 h-2 rounded-full bg-white shadow-[0_0_8px_white]"></span>
-            </button>
+        <!-- Controls Container -->
+        <div class="bg-black/80 backdrop-blur-md p-4 rounded-2xl border border-white/10 shadow-2xl w-64 space-y-4">
             
-            <!-- Color Picker (Hidden if rainbow) -->
-            <div class="relative group">
-                <input type="color" id="colorPicker" value="#00ffcc" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                <div class="w-full h-full rounded-lg border border-white/20 flex items-center justify-center gap-2 bg-gray-800 text-xs font-medium group-hover:bg-gray-700 transition">
-                    <div id="colorPreview" class="w-3 h-3 rounded-full bg-[#00ffcc] shadow-[0_0_10px_#00ffcc]"></div>
-                    <span>Pick Color</span>
+            <div class="flex justify-between items-center border-b border-white/10 pb-3">
+                <h1 class="font-bold text-gray-200">Brush Settings</h1>
+                <button id="clearBtn" class="text-xs bg-red-500/20 hover:bg-red-500/40 text-red-400 px-3 py-1 rounded transition">Clear</button>
+            </div>
+
+            <!-- Mode -->
+            <div class="flex gap-2">
+                <button id="rainbowBtn" class="flex-1 py-2 text-xs font-bold rounded bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-lg ring-2 ring-white/20">Rainbow</button>
+                <button id="solidBtn" class="flex-1 py-2 text-xs font-bold rounded bg-gray-700 text-gray-400 hover:bg-gray-600 transition">Solid</button>
+            </div>
+
+            <div id="colorContainer" class="hidden">
+                <label class="text-xs text-gray-400 block mb-1">Color</label>
+                <input type="color" id="colorPicker" value="#00ffcc" class="w-full h-8 rounded cursor-pointer bg-transparent border-0">
+            </div>
+
+            <div>
+                <div class="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>Thickness</span>
+                    <span id="sizeVal">20px</span>
                 </div>
+                <input type="range" id="sizeSlider" min="5" max="60" value="20" class="w-full accent-purple-500 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
             </div>
-        </div>
 
-        <div class="space-y-1">
-            <div class="flex justify-between text-xs text-gray-400">
-                <span>Base Size</span>
-                <span id="sizeValue">20px</span>
+            <div>
+                 <div class="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>Smoothing</span>
+                    <span id="smoothVal">High</span>
+                </div>
+                <input type="range" id="smoothSlider" min="1" max="10" value="5" class="w-full accent-blue-500 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer">
             </div>
-            <input type="range" id="sizeSlider" min="5" max="50" value="20" class="w-full">
+            
+            <button id="downloadBtn" class="w-full py-2 bg-white/10 hover:bg-white/20 rounded text-xs text-gray-300 transition flex items-center justify-center gap-2">
+                <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+                Save Drawing
+            </button>
         </div>
-
     </div>
 
     <script>
+        // --- Configuration & State ---
+        const config = {
+            baseSize: 20,
+            isRainbow: true,
+            color: '#00ffcc',
+            smoothing: 0.85, // 0 to 1 (higher is smoother but more laggy)
+            pinchThreshold: 0.05 // Distance between thumb and index to trigger draw
+        };
+
+        const state = {
+            isDrawing: false,
+            hue: 0,
+            prevX: null,
+            prevY: null,
+            cursorX: window.innerWidth / 2,
+            cursorY: window.innerHeight / 2
+        };
+
+        // --- Elements ---
         const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency on bg
-        
-        // UI Elements
-        const clearBtn = document.getElementById('clearBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const rainbowToggle = document.getElementById('rainbowToggle');
-        const rainbowStatus = document.getElementById('rainbowStatus');
-        const colorPicker = document.getElementById('colorPicker');
-        const colorPreview = document.getElementById('colorPreview');
-        const sizeSlider = document.getElementById('sizeSlider');
-        const sizeValue = document.getElementById('sizeValue');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const videoElement = document.getElementById('videoElement');
+        const previewVideo = document.getElementById('previewVideo');
+        const loader = document.getElementById('loader');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
 
-        // State
-        let isDrawing = false;
-        let lastX = 0;
-        let lastY = 0;
-        let hue = 0;
-        let direction = true;
-        let isRainbow = true;
-        let baseSize = 20;
-        let selectedColor = '#00ffcc';
-
-        // Setup Canvas
+        // --- Resize Logic ---
         function resize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            // Fill background immediately after resize
             ctx.fillStyle = '#111111';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
         window.addEventListener('resize', resize);
         resize();
 
-        // Color Utilities
+        // --- UI Event Listeners ---
+        document.getElementById('clearBtn').addEventListener('click', () => {
+             ctx.fillStyle = '#111111';
+             ctx.fillRect(0, 0, canvas.width, canvas.height);
+        });
+
+        document.getElementById('rainbowBtn').addEventListener('click', (e) => {
+            config.isRainbow = true;
+            document.getElementById('colorContainer').classList.add('hidden');
+            e.target.classList.add('ring-2', 'ring-white/20');
+            document.getElementById('solidBtn').classList.remove('ring-2', 'ring-white/20', 'bg-gray-600', 'text-white');
+            document.getElementById('solidBtn').classList.add('text-gray-400');
+        });
+
+        document.getElementById('solidBtn').addEventListener('click', (e) => {
+            config.isRainbow = false;
+            document.getElementById('colorContainer').classList.remove('hidden');
+            e.target.classList.add('ring-2', 'ring-white/20', 'bg-gray-600', 'text-white');
+            e.target.classList.remove('text-gray-400');
+            document.getElementById('rainbowBtn').classList.remove('ring-2', 'ring-white/20');
+        });
+
+        document.getElementById('colorPicker').addEventListener('input', (e) => config.color = e.target.value);
+        
+        document.getElementById('sizeSlider').addEventListener('input', (e) => {
+            config.baseSize = parseInt(e.target.value);
+            document.getElementById('sizeVal').textContent = config.baseSize + 'px';
+        });
+
+        document.getElementById('smoothSlider').addEventListener('input', (e) => {
+            // Map 1-10 slider to 0.5 - 0.95 smoothing factor
+            const val = parseInt(e.target.value);
+            config.smoothing = 0.5 + (val / 20); 
+            document.getElementById('smoothVal').textContent = val < 4 ? "Low" : (val > 7 ? "High" : "Medium");
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'hand-drawing.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+
+        // --- Helper: Hex to HSL ---
         function hexToHsl(hex) {
             let result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            let r = parseInt(result[1], 16);
-            let g = parseInt(result[2], 16);
-            let b = parseInt(result[3], 16);
-            r /= 255, g /= 255, b /= 255;
+            let r = parseInt(result[1], 16) / 255;
+            let g = parseInt(result[2], 16) / 255;
+            let b = parseInt(result[3], 16) / 255;
             let max = Math.max(r, g, b), min = Math.min(r, g, b);
             let h, s, l = (max + min) / 2;
-            if (max == min) { h = s = 0; } 
+            if (max == min) h = s = 0;
             else {
                 let d = max - min;
                 s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
@@ -159,165 +260,185 @@
             return { h: h * 360, s: s * 100, l: l * 100 };
         }
 
-        // Drawing Function
-        function draw(e) {
-            if (!isDrawing) return;
-
-            // Get coordinates (touch or mouse)
-            let x, y;
-            if (e.touches) {
-                x = e.touches[0].clientX;
-                y = e.touches[0].clientY;
+        // --- Drawing Logic (The 3D Tube Effect) ---
+        function drawPoint(x, y, isDrawingMode) {
+            
+            // Draw Cursor
+            // Use an overlay canvas approach? No, just redraw section or use XOR? 
+            // For simplicity in this single file, we will draw the cursor directly 
+            // but we need to manage the "dirty" state if we want to erase it.
+            // Actually, let's just draw the "Ink" permanently and maybe a custom DOM element for cursor.
+            
+            // Move the custom DOM cursor
+            const cursorEl = document.getElementById('handCursor') || createCursor();
+            cursorEl.style.transform = `translate(${x}px, ${y}px)`;
+            
+            if (isDrawingMode) {
+                cursorEl.style.borderColor = '#fff';
+                cursorEl.style.backgroundColor = config.isRainbow ? `hsl(${state.hue}, 100%, 50%)` : config.color;
+                cursorEl.style.width = '15px';
+                cursorEl.style.height = '15px';
             } else {
-                x = e.clientX;
-                y = e.clientY;
+                cursorEl.style.borderColor = 'rgba(255,255,255,0.5)';
+                cursorEl.style.backgroundColor = 'transparent';
+                cursorEl.style.width = '20px';
+                cursorEl.style.height = '20px';
+                
+                // If not drawing, reset previous point to avoid long lines when reconnecting
+                state.prevX = null;
+                state.prevY = null;
+                return;
             }
 
-            // Calculate distance for interpolation
-            const dx = x - lastX;
-            const dy = y - lastY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (state.prevX === null) {
+                state.prevX = x;
+                state.prevY = y;
+                return;
+            }
 
-            // Dynamic size based on speed (faster = thinner)
-            // Clamp speed effect to avoid lines disappearing or becoming too huge
-            const speedFactor = Math.min(distance, 50); 
-            const dynamicSize = Math.max(baseSize - (speedFactor * 0.4), 5);
-
-            // Interpolation: Draw circles between points if moving fast to close gaps
-            // This creates the smooth "tube" effect
-            const steps = Math.max(Math.abs(dx), Math.abs(dy)); // 1 pixel steps
+            const dx = x - state.prevX;
+            const dy = y - state.prevY;
+            const dist = Math.sqrt(dx*dx + dy*dy);
             
-            for (let i = 0; i < steps; i+=2) { // Step by 2 for performance, still looks smooth
-                const interpX = lastX + (dx * (i / steps));
-                const interpY = lastY + (dy * (i / steps));
-                
-                // 3D Tube Logic
-                // We draw a radial gradient at every point. 
-                // Center is light, edge is color. This mimics a sphere. 
-                // Stacking spheres creates a tube.
-                
-                const currentHue = isRainbow ? hue : hexToHsl(selectedColor).h;
-                const saturation = isRainbow ? 100 : hexToHsl(selectedColor).s;
-                const lightness = isRainbow ? 50 : hexToHsl(selectedColor).l;
+            // Dynamic thickness based on speed (clamped)
+            const speed = Math.min(dist, 50);
+            const size = Math.max(config.baseSize - (speed * 0.3), 5);
 
-                const gradient = ctx.createRadialGradient(
-                    interpX, interpY, dynamicSize * 0.1, // Inner circle (highlight)
-                    interpX, interpY, dynamicSize        // Outer circle
-                );
+            const steps = Math.ceil(dist);
+            
+            for (let i = 0; i < steps; i+=2) {
+                const ix = state.prevX + (dx * (i/steps));
+                const iy = state.prevY + (dy * (i/steps));
 
-                // Highlight color (always whitish for 3D specular reflection)
-                gradient.addColorStop(0, `hsl(${currentHue}, ${saturation}%, 95%)`); 
-                // Mid color
-                gradient.addColorStop(0.4, `hsl(${currentHue}, ${saturation}%, ${lightness}%)`);
-                // Edge color (darker for depth)
-                gradient.addColorStop(1, `hsl(${currentHue}, ${saturation}%, 20%)`);
+                const currentHue = config.isRainbow ? state.hue : hexToHsl(config.color).h;
+                const sat = config.isRainbow ? 100 : hexToHsl(config.color).s;
+                const lig = config.isRainbow ? 50 : hexToHsl(config.color).l;
 
-                ctx.fillStyle = gradient;
+                const grad = ctx.createRadialGradient(ix, iy, size * 0.1, ix, iy, size);
+                grad.addColorStop(0, `hsl(${currentHue}, ${sat}%, 95%)`);
+                grad.addColorStop(0.4, `hsl(${currentHue}, ${sat}%, ${lig}%)`);
+                grad.addColorStop(1, `hsl(${currentHue}, ${sat}%, 20%)`);
+
+                ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.arc(interpX, interpY, dynamicSize, 0, Math.PI * 2);
+                ctx.arc(ix, iy, size, 0, Math.PI * 2);
                 ctx.fill();
 
-                if (isRainbow) {
-                    hue++; 
-                    if (hue >= 360) hue = 0;
+                if (config.isRainbow) {
+                    state.hue = (state.hue + 1) % 360;
                 }
             }
 
-            lastX = x;
-            lastY = y;
+            state.prevX = x;
+            state.prevY = y;
         }
 
-        // Event Listeners
-        const startDraw = (e) => {
-            isDrawing = true;
-            if (e.touches) {
-                lastX = e.touches[0].clientX;
-                lastY = e.touches[0].clientY;
-            } else {
-                lastX = e.clientX;
-                lastY = e.clientY;
-            }
-            // Draw a single dot if clicked
-            draw(e); 
-        };
+        function createCursor() {
+            const el = document.createElement('div');
+            el.id = 'handCursor';
+            el.style.position = 'fixed';
+            el.style.top = '0';
+            el.style.left = '0';
+            el.style.border = '2px solid white';
+            el.style.borderRadius = '50%';
+            el.style.pointerEvents = 'none';
+            el.style.zIndex = '1000';
+            el.style.transition = 'width 0.1s, height 0.1s, background-color 0.1s';
+            el.style.transform = 'translate(-50%, -50%)'; // Center it
+            el.style.marginLeft = '-10px'; // Offset for centering
+            el.style.marginTop = '-10px';
+            document.body.appendChild(el);
+            return el;
+        }
 
-        const stopDraw = () => {
-            isDrawing = false;
-            ctx.beginPath(); // Reset path
-        };
 
-        // Mouse
-        canvas.addEventListener('mousedown', startDraw);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDraw);
-        canvas.addEventListener('mouseout', stopDraw);
-
-        // Touch
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // Stop scrolling
-            startDraw(e);
-        }, { passive: false });
+        // --- MediaPipe Handling ---
         
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault(); // Stop scrolling
-            draw(e);
-        }, { passive: false });
-        
-        canvas.addEventListener('touchend', stopDraw);
+        function onResults(results) {
+            // Hide loader once we get first result
+            if(loader.style.opacity !== '0') {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.style.display = 'none', 500);
+            }
 
-        // UI Logic
-        clearBtn.addEventListener('click', () => {
-            // Fade out effect
-            ctx.fillStyle = 'rgba(17, 17, 17, 0.1)';
-            let fadeCount = 0;
-            const fade = setInterval(() => {
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                fadeCount++;
-                if(fadeCount > 10) {
-                    clearInterval(fade);
-                    ctx.fillStyle = '#111111';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                }
-            }, 20);
-        });
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                statusIndicator.classList.remove('bg-red-500');
+                statusIndicator.classList.add('bg-green-500');
+                
+                // Get the first hand
+                const landmarks = results.multiHandLandmarks[0];
+                
+                // 8 = Index Finger Tip
+                // 4 = Thumb Tip
+                const indexTip = landmarks[8];
+                const thumbTip = landmarks[4];
 
-        downloadBtn.addEventListener('click', () => {
-            const link = document.createElement('a');
-            link.download = 'my-3d-drawing.png';
-            link.href = canvas.toDataURL();
-            link.click();
-        });
+                // Convert to canvas coordinates (Mirror X)
+                const rawX = (1 - indexTip.x) * canvas.width;
+                const rawY = indexTip.y * canvas.height;
 
-        rainbowToggle.addEventListener('click', () => {
-            isRainbow = !isRainbow;
-            if (isRainbow) {
-                rainbowToggle.classList.add('ring-2', 'ring-offset-2', 'ring-offset-gray-900', 'ring-purple-500');
-                rainbowStatus.style.backgroundColor = 'white';
-                rainbowStatus.style.boxShadow = '0 0 8px white';
+                // Smooth coordinates
+                state.cursorX = (state.cursorX * config.smoothing) + (rawX * (1 - config.smoothing));
+                state.cursorY = (state.cursorY * config.smoothing) + (rawY * (1 - config.smoothing));
+
+                // Check Pinch Distance (Euclidean distance in normalized space usually works better, but let's use screen space for consistency)
+                // Actually MediaPipe gives normalized (0-1). Let's use normalized for pinch calc to be resolution independent.
+                const pinchDist = Math.sqrt(
+                    Math.pow(indexTip.x - thumbTip.x, 2) + 
+                    Math.pow(indexTip.y - thumbTip.y, 2)
+                );
+
+                const isPinching = pinchDist < config.pinchThreshold;
+                
+                statusText.textContent = isPinching ? "Drawing..." : "Move Cursor";
+                statusIndicator.classList.toggle('animate-pulse', isPinching);
+
+                drawPoint(state.cursorX, state.cursorY, isPinching);
+
             } else {
-                rainbowToggle.classList.remove('ring-2', 'ring-offset-2', 'ring-offset-gray-900', 'ring-purple-500');
-                rainbowStatus.style.backgroundColor = 'transparent';
-                rainbowStatus.style.boxShadow = 'none';
+                statusIndicator.classList.add('bg-red-500');
+                statusIndicator.classList.remove('bg-green-500');
+                statusText.textContent = "Show Hand";
+                state.prevX = null; // Reset stroke
+            }
+        }
+
+        // Initialize MediaPipe Hands
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        // Start Camera
+        const camera = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 640,
+            height: 480
+        });
+
+        // Link Preview Video to the same stream once available
+        // Note: The 'Camera' utility handles the stream internally for videoElement.
+        // We need to hook into the videoElement to show the preview.
+        videoElement.addEventListener('loadeddata', () => {
+            if (videoElement.srcObject) {
+                previewVideo.srcObject = videoElement.srcObject;
             }
         });
 
-        colorPicker.addEventListener('input', (e) => {
-            selectedColor = e.target.value;
-            colorPreview.style.backgroundColor = selectedColor;
-            colorPreview.style.boxShadow = `0 0 10px ${selectedColor}`;
-            // If user picks a color, turn off rainbow automatically
-            if(isRainbow) rainbowToggle.click(); 
-        });
-
-        sizeSlider.addEventListener('input', (e) => {
-            baseSize = parseInt(e.target.value);
-            sizeValue.textContent = baseSize + 'px';
-        });
-
-        // Initial setup for rainbow button state
-        rainbowToggle.classList.add('ring-2', 'ring-offset-2', 'ring-offset-gray-900', 'ring-purple-500');
+        camera.start();
 
     </script>
 </body>
 </html>
+
 
