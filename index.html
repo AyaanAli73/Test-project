@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gesture Explosion</title>
+    <title>Gesture Explosion Fixed</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
         #c { width: 100vw; height: 100vh; display: block; }
@@ -23,6 +23,7 @@
             text-align: center; color: white;
             font-weight: bold; font-size: 18px;
             text-shadow: 0 0 10px cyan; pointer-events: none;
+            z-index: 20;
         }
         #sub-status { font-size: 12px; color: #aaa; margin-top: 5px; }
 
@@ -32,6 +33,7 @@
             color: cyan; background: rgba(0,0,0,0.8);
             padding: 20px; border-radius: 10px;
             text-align: center; font-family: monospace;
+            z-index: 30;
         }
     </style>
 
@@ -144,7 +146,7 @@
 
         const statusEl = document.getElementById('status');
 
-        // --- 4. MEDIAPIPE HANDS ---
+        // --- 4. MEDIAPIPE HANDS (IMPROVED ALGORITHM) ---
         function onResults(results) {
             document.getElementById('loader').style.display = 'none';
             
@@ -156,20 +158,39 @@
                 state.handX = (lm[9].x - 0.5) * 4; 
                 state.handY = (lm[9].y - 0.5) * 4;
 
-                // B. Fist Detection logic
-                // Check if finger tips are close to wrist
-                const wrist = lm[0];
-                const tips = [lm[8], lm[12], lm[16], lm[20]]; // Index, Middle, Ring, Pinky
-                let totalDist = 0;
+                // B. ROBUST FIST DETECTION (FIXED)
+                // We compare the length of fingers to the size of the palm.
+                // This makes it work regardless of how far away your hand is.
                 
-                tips.forEach(t => {
-                    totalDist += Math.hypot(t.x - wrist.x, t.y - wrist.y);
+                const wrist = lm[0];
+                const middleKnuckle = lm[9];
+                
+                // 1. Calculate Palm Size (Reference Scale)
+                // Distance from Wrist to Middle Finger Knuckle
+                const palmSize = Math.hypot(middleKnuckle.x - wrist.x, middleKnuckle.y - wrist.y);
+                
+                // 2. Check each finger
+                // If tip-to-wrist distance is small (close to palm size), it is curled.
+                // If tip-to-wrist distance is large (> 1.6x palm size), it is open.
+                const tips = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky
+                let curledFingers = 0;
+                
+                tips.forEach(index => {
+                    const tip = lm[index];
+                    const distToWrist = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
+                    
+                    // Threshold: If tip distance is less than 1.6x palm size, consider it curled
+                    if (distToWrist < palmSize * 1.6) {
+                        curledFingers++;
+                    }
                 });
-                const avgDist = totalDist / 4;
 
-                // < 0.25 usually means fingers are curled in
-                state.isFist = avgDist < 0.25; 
+                // 3. To be a "Fist", at least 3 fingers must be curled
+                state.isFist = curledFingers >= 3;
 
+            } else {
+                // No hand detected? Default to open.
+                state.isFist = false;
             }
         }
 
@@ -288,4 +309,5 @@
     </script>
 </body>
 </html>
+
 
