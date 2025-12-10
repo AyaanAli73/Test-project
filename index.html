@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Gesture Controlled 3D Art</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #050505; /* Deep black */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none; /* Prevent scrolling on mobile */
+        }
+
+        /* The 3D Canvas */
+        #c {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* The Camera Preview (Small PIP) */
+        .video-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 100px; /* Compact for mobile */
+            height: 133px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid #00ffcc;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+            z-index: 10;
+            background: #000;
+        }
+
+        #input_video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* Mirror effect */
+        }
+
+        /* Loading / Status Overlay */
+        #status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ffcc;
+            font-size: 16px;
+            text-align: center;
+            background: rgba(10, 10, 10, 0.9);
+            padding: 24px;
+            border-radius: 16px;
+            border: 1px solid #333;
+            z-index: 20;
+            pointer-events: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: opacity 0.5s ease;
+        }
+
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(0, 255, 204, 0.3);
+            border-radius: 50%;
+            border-top-color: #00ffcc;
+            animation: spin 1s ease-in-out infinite;
+            margin: 0 auto 15px auto;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Instructions Overlay */
+        #controls-hint {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            z-index: 5;
+            pointer-events: none;
+        }
+    </style>
+
+    <!-- Three.js Import Map -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <!-- MediaPipe Global Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <!-- UI Elements -->
+    <div id="status">
+        <div class="spinner"></div>
+        <div>Initializing AI...<br><small style="color:#aaa">Please allow camera access</small></div>
+    </div>
+
+    <div id="controls-hint">
+        🖐 Move to Rotate &nbsp;&bull;&nbsp; 👌 Pinch to Resize
+    </div>
+
+    <!-- Camera Feed -->
+    <div class="video-container">
+        <video id="input_video" playsinline webkit-playsinline></video>
+    </div>
+
+    <!-- 3D Render Canvas -->
+    <canvas id="c"></canvas>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- Configuration ---
+        const CONFIG = {
+            color: 0x00ffcc,      // Cyan
+            secondary: 0xff00aa,  // Magenta
+            bg: 0x050505
+        };
+
+        // --- 1. Three.js Setup ---
+        const canvas = document.querySelector('#c');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        
+        // Optimize for mobile high-DPI screens (prevents lag)
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        const scene = new THREE.Scene();
+        // Fog for depth
+        scene.fog = new THREE.FogExp2(CONFIG.bg, 0.03);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.z = 4;
+
+        // --- 2. Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        // Moving lights to make the metal shiny
+        const light1 = new THREE.PointLight(CONFIG.color, 50);
+        light1.position.set(2, 3, 4);
+        scene.add(light1);
+
+        const light2 = new THREE.PointLight(CONFIG.secondary, 50);
+        light2.position.set(-2, -3, 2);
+        scene.add(light2);
+
+        // --- 3. The Object (Torus Knot) ---
+        // Reduced geometry detail slightly for mobile performance
+        const geometry = new THREE.TorusKnotGeometry(1.1, 0.35, 100, 16);
+        
+        // Dark metallic material
+        const material = new THREE.MeshStandardMaterial({ 
+            color: 0x111111,
+            roughness: 0.2,
+            metalness: 0.9,
+        });
+
+        // Wireframe overlay
+        const wireframeMaterial = new THREE.MeshBasicMaterial({ 
+            color: CONFIG.color,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.15,
+            blending: THREE.AdditiveBlending
+        });
+
+        const mainMesh = new THREE.Mesh(geometry, material);
+        const wireMesh = new THREE.Mesh(geometry, wireframeMaterial);
+        
+        mainMesh.add(wireMesh); // Stick wireframe to main mesh
+        scene.add(mainMesh);
+
+        // Floating particles for atmosphere
+        const particlesGeometry = new THREE.BufferGeometry();
+        const particlesCount = 300;
+        const posArray = new Float32Array(particlesCount * 3);
+        
+        for(let i = 0; i < particlesCount * 3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 15;
+        }
+        
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const particlesMaterial = new THREE.PointsMaterial({
+            size: 0.03,
+            color: CONFIG.color,
+            transparent: true,
+            opacity: 0.6
+        });
+        const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particlesMesh);
+
+
+        // --- 4. Logic & State ---
+        let targetRotX = 0;
+        let targetRotY = 0;
+        let targetScale = 1;
+        
+        // Helper to map ranges
+        function mapRange(value, inMin, inMax, outMin, outMax) {
+            return (value - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+        }
+
+        // --- 5. MediaPipe Integration ---
+        const videoElement = document.getElementById('input_video');
+        const statusElement = document.getElementById('status');
+
+        function onResults(results) {
+            // Hide loading screen once we get first results
+            if(statusElement.style.opacity !== '0') {
+                statusElement.style.opacity = '0';
+                setTimeout(() => statusElement.style.display = 'none', 500);
+            }
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+
+                // --- ROTATION CONTROL ---
+                // Use Landmark 9 (Middle Finger MCP) as hand center
+                // Coordinates are normalized 0.0 to 1.0
+                const x = landmarks[9].x; 
+                const y = landmarks[9].y;
+
+                // Map screen coordinates to rotation angles
+                // Invert X because the webcam is mirrored
+                targetRotY = mapRange(x, 0, 1, -2.5, 2.5);
+                targetRotX = mapRange(y, 0, 1, -2.5, 2.5);
+
+                // --- SCALE CONTROL (Pinch) ---
+                // Distance between Thumb Tip (4) and Index Tip (8)
+                const thumb = landmarks[4];
+                const index = landmarks[8];
+                const distance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
+
+                // Pinch (close) = ~0.05, Open = ~0.25+
+                // We map this to scale
+                const newScale = mapRange(distance, 0.02, 0.25, 0.4, 1.4);
+                // Clamp scale to reasonable limits
+                targetScale = Math.max(0.4, Math.min(newScale, 2.0));
+                
+                // Visual feedback: Brighten wireframe when pinching
+                if(distance < 0.05) {
+                    wireMesh.material.opacity = 0.8;
+                    wireMesh.material.color.setHex(CONFIG.secondary);
+                } else {
+                    wireMesh.material.opacity = 0.15;
+                    wireMesh.material.color.setHex(CONFIG.color);
+                }
+            } else {
+                // Idle state if no hand detected
+                // Slowly return to center/normal size
+                targetScale = 1;
+                // But keep current rotation
+            }
+        }
+
+        // Initialize Hands
+        const hands = new Hands({locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+        }});
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 0, // '0' is LITE model (Faster on mobile)
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+
+        // Start Camera
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({image: videoElement});
+            },
+            width: 480, // Lower resolution for better performance on mobile
+            height: 360,
+            facingMode: 'user'
+        });
+        
+        cameraUtils.start()
+            .then(() => console.log("Camera started"))
+            .catch(err => {
+                console.error(err);
+                statusElement.innerHTML = "Camera Error<br><small>Check permissions</small>";
+            });
+
+        // --- 6. Animation Loop ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            const time = clock.getElapsedTime();
+
+            // Smooth Interpolation (Lerp)
+            // This makes the object follow the hand smoothly instead of snapping
+            mainMesh.rotation.x += (targetRotX - mainMesh.rotation.x) * 5 * delta;
+            mainMesh.rotation.y += (targetRotY - mainMesh.rotation.y) * 5 * delta;
+
+            const currentScale = mainMesh.scale.x;
+            const smoothScale = currentScale + (targetScale - currentScale) * 5 * delta;
+            mainMesh.scale.set(smoothScale, smoothScale, smoothScale);
+
+            // Idle Animation: Slowly rotate particles
+            particlesMesh.rotation.y = time * 0.05;
+
+            // Idle Animation: Slight bobbing if hands are still
+            if (Math.abs(targetRotX - mainMesh.rotation.x) < 0.01) {
+                mainMesh.rotation.z += 0.005; 
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>
+
