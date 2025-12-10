@@ -3,51 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gesture Particle Galaxy</title>
+    <title>Gesture Physics Engine</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background-color: #000;
-            font-family: 'Courier New', monospace;
+            font-family: 'Segoe UI', monospace;
             touch-action: none;
         }
 
+        /* Fullscreen Canvas */
         #c {
             width: 100vw;
             height: 100vh;
             display: block;
-        }
-
-        /* Heads Up Display */
-        .hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: rgba(255, 255, 255, 0.8);
-            pointer-events: none;
-            z-index: 5;
-        }
-
-        h1 {
-            margin: 0;
-            font-size: 1.2rem;
-            text-shadow: 0 0 10px #00ffff;
-        }
-
-        p {
-            margin: 5px 0;
-            font-size: 0.8rem;
-            color: #aaa;
-        }
-
-        .status {
-            margin-top: 10px;
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-weight: bold;
-            transition: all 0.3s;
         }
 
         /* Camera Feed (Bottom Right) */
@@ -57,12 +27,11 @@
             right: 20px;
             width: 100px;
             height: 133px;
-            border-radius: 10px;
-            border: 1px solid #444;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
             overflow: hidden;
             background: #000;
             z-index: 10;
-            opacity: 0.7;
         }
 
         #input_video {
@@ -72,21 +41,46 @@
             transform: scaleX(-1);
         }
 
-        #loader {
+        /* UI Overlay */
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            pointer-events: none;
+        }
+
+        h1 { margin: 0; font-size: 18px; text-shadow: 0 0 10px cyan; }
+        .hint { font-size: 12px; color: #aaa; margin-top: 5px; }
+
+        /* Status Badge */
+        #status {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            background: rgba(0, 255, 255, 0.1);
+            color: cyan;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            transition: 0.3s;
+        }
+        
+        #loading {
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             color: cyan;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.8);
             padding: 20px;
-            border: 1px solid cyan;
-            border-radius: 8px;
+            border-radius: 10px;
+            z-index: 20;
             text-align: center;
-            z-index: 100;
         }
     </style>
 
-    <!-- Three.js -->
+    <!-- Imports -->
     <script type="importmap">
         {
             "imports": {
@@ -94,24 +88,20 @@
             }
         }
     </script>
-    
-    <!-- MediaPipe -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <div id="loader">
-        Gathering Stardust...<br>
-        <small>Please allow camera access</small>
-    </div>
+    <div id="loading">Initializing Physics...<br>Allow Camera</div>
 
-    <div class="hud">
-        <h1>NEBULA ENGINE</h1>
-        <p>🖐 Open: Gravity Well</p>
-        <p>✊ Fist: Supernova</p>
-        <div id="status-badge" class="status" style="background:#004444; color:#00ffff">SYSTEM STABLE</div>
+    <div id="ui">
+        <h1>PARTICLE PHYSICS</h1>
+        <div class="hint">✊ HOLD FIST to Gather Sphere</div>
+        <div class="hint">🖐 RELEASE to Explode</div>
+        <div class="hint">👋 MOVE to Rotate</div>
+        <div id="status">STATUS: IDLE</div>
     </div>
 
     <div class="video-container">
@@ -123,144 +113,129 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- 1. GENERATE PARTICLE TEXTURE ---
-        // Creating a glow sprite programmatically so we don't need external image files
-        function getTexture() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 32;
-            canvas.height = 32;
-            const context = canvas.getContext('2d');
-            const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
-            gradient.addColorStop(0, 'rgba(255,255,255,1)');
-            gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
-            gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
-            gradient.addColorStop(1, 'rgba(0,0,0,0)');
-            context.fillStyle = gradient;
-            context.fillRect(0, 0, 32, 32);
-            const texture = new THREE.Texture(canvas);
-            texture.needsUpdate = true;
-            return texture;
-        }
-
-        // --- 2. THREE.JS SETUP ---
+        // --- 1. SETUP ---
         const canvas = document.querySelector('#c');
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: false }); // Antialias off for performance
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.02);
+        // Background gradient effect using fog
+        scene.fog = new THREE.FogExp2(0x000510, 0.02);
+        scene.background = new THREE.Color(0x000510);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 4;
+        camera.position.z = 5;
 
-        // --- 3. CREATE THE PARTICLES ---
-        const particlesCount = 3000; // Number of stars
-        const posArray = new Float32Array(particlesCount * 3); // Current positions
-        const originalPosArray = new Float32Array(particlesCount * 3); // Target positions (Sphere shape)
-        const randomArray = new Float32Array(particlesCount * 3); // Random explosion directions
-        const colorsArray = new Float32Array(particlesCount * 3); // Colors
+        // --- 2. PARTICLE SYSTEM ---
+        const count = 4000; // Particle Count
+        const geometry = new THREE.BufferGeometry();
+        
+        // Arrays for positions, colors, and our physics data
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+        
+        // Physics arrays (not passed to GPU, used for calc)
+        const velocities = new Float32Array(count * 3);
+        const homePositions = new Float32Array(count * 3);
 
-        const color1 = new THREE.Color(0x00ffff); // Blue (Stable)
-        const color2 = new THREE.Color(0xff0055); // Red (Explosion)
+        const color1 = new THREE.Color(0x00ffff); // Cyan (Idle)
+        const color2 = new THREE.Color(0xffaa00); // Orange/Gold (Core)
 
-        for(let i = 0; i < particlesCount; i++) {
-            // Spherical Coordinate Math to make a sphere
-            const phi = Math.acos( -1 + ( 2 * i ) / particlesCount );
-            const theta = Math.sqrt( particlesCount * Math.PI ) * phi;
+        for(let i = 0; i < count; i++) {
+            const i3 = i * 3;
             
-            const r = 1.2; // Radius of sphere
+            // Generate a random sphere cloud for "Home" positions
+            const r = 2.5 + Math.random() * 1.0;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
+            
+            const x = r * Math.sin(phi) * Math.cos(theta);
+            const y = r * Math.sin(phi) * Math.sin(theta);
+            const z = r * Math.cos(phi);
 
-            const x = r * Math.cos( theta ) * Math.sin( phi );
-            const y = r * Math.sin( theta ) * Math.sin( phi );
-            const z = r * Math.cos( phi );
+            homePositions[i3] = x;
+            homePositions[i3+1] = y;
+            homePositions[i3+2] = z;
 
-            // Set Initial positions
-            posArray[i*3] = x;
-            posArray[i*3+1] = y;
-            posArray[i*3+2] = z;
+            // Start at home
+            positions[i3] = x;
+            positions[i3+1] = y;
+            positions[i3+2] = z;
 
-            // Save Original for return
-            originalPosArray[i*3] = x;
-            originalPosArray[i*3+1] = y;
-            originalPosArray[i*3+2] = z;
+            colors[i3] = color1.r;
+            colors[i3+1] = color1.g;
+            colors[i3+2] = color1.b;
 
-            // Random Explosion Vector
-            randomArray[i*3] = (Math.random() - 0.5) * 6; // Explode X
-            randomArray[i*3+1] = (Math.random() - 0.5) * 6; // Explode Y
-            randomArray[i*3+2] = (Math.random() - 0.5) * 6; // Explode Z
-
-            // Initial Color (Blue)
-            colorsArray[i*3] = color1.r;
-            colorsArray[i*3+1] = color1.g;
-            colorsArray[i*3+2] = color1.b;
+            velocities[i3] = 0;
+            velocities[i3+1] = 0;
+            velocities[i3+2] = 0;
         }
 
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colorsArray, 3));
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        // Create a soft glow texture
+        const canvasTex = document.createElement('canvas');
+        canvasTex.width = 32; canvasTex.height = 32;
+        const ctx = canvasTex.getContext('2d');
+        const grad = ctx.createRadialGradient(16,16,0,16,16,16);
+        grad.addColorStop(0, 'rgba(255,255,255,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad; ctx.fillRect(0,0,32,32);
+        const texture = new THREE.Texture(canvasTex);
+        texture.needsUpdate = true;
 
         const material = new THREE.PointsMaterial({
             size: 0.08,
-            map: getTexture(),
+            map: texture,
+            vertexColors: true,
             transparent: true,
             opacity: 0.8,
-            vertexColors: true,
             blending: THREE.AdditiveBlending,
             depthWrite: false
         });
 
-        const particleMesh = new THREE.Points(geometry, material);
-        scene.add(particleMesh);
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
 
 
-        // --- 4. GAME LOGIC VARIABLES ---
-        let targetRotX = 0;
-        let targetRotY = 0;
-        let isFist = false;
-        let explosionFactor = 0; // 0 = Sphere, 1 = Exploded
+        // --- 3. STATE & PHYSICS LOGIC ---
+        let state = {
+            isFist: false,
+            wasFist: false,
+            handX: 0,
+            handY: 0
+        };
 
-        const statusBadge = document.getElementById('status-badge');
+        const statusEl = document.getElementById('status');
 
-        // --- 5. HAND TRACKING ---
+        // --- 4. MEDIAPIPE ---
         function onResults(results) {
-            document.getElementById('loader').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const lm = results.multiHandLandmarks[0];
 
-                // 1. ROTATION: Track Center of Hand (Index 9)
-                targetRotY = (lm[9].x - 0.5) * 5;
-                targetRotX = (lm[9].y - 0.5) * 5;
+                // Rotation (Center of hand)
+                state.handX = (lm[9].x - 0.5) * 4; // Multiplier for sensitivity
+                state.handY = (lm[9].y - 0.5) * 4;
 
-                // 2. FIST DETECTION: 
-                // We check the distance between the Wrist (0) and Index Tip (8)
-                // If tip is very close to wrist, it's a fist.
+                // Fist Detection
+                // Compare distance of fingertips to wrist
                 const wrist = lm[0];
-                const indexTip = lm[8];
-                const pinkyTip = lm[20];
-                
-                // Average distance of tips to wrist
-                const d1 = Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y);
-                const d2 = Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y);
-                const avgDist = (d1 + d2) / 2;
+                const tips = [lm[8], lm[12], lm[16], lm[20]];
+                let avgDist = 0;
+                tips.forEach(tip => {
+                    avgDist += Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
+                });
+                avgDist /= 4;
 
-                // Threshold: If avg distance < 0.25 (depends on hand size/camera distance)
-                // usually open hand is > 0.4, fist is < 0.2
+                // Threshold logic
                 if (avgDist < 0.25) {
-                    if(!isFist) {
-                        isFist = true;
-                        statusBadge.innerText = "⚠️ SUPERNOVA DETECTED";
-                        statusBadge.style.background = "#550000";
-                        statusBadge.style.color = "#ff5555";
-                    }
+                    state.isFist = true;
                 } else {
-                    if(isFist) {
-                        isFist = false;
-                        statusBadge.innerText = "SYSTEM STABLE";
-                        statusBadge.style.background = "#004444";
-                        statusBadge.style.color = "#00ffff";
-                    }
+                    state.isFist = false;
                 }
             }
         }
@@ -270,7 +245,7 @@
         
         hands.setOptions({
             maxNumHands: 1,
-            modelComplexity: 0, // Lite model
+            modelComplexity: 0,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
@@ -284,63 +259,142 @@
         cameraUtils.start();
 
 
-        // --- 6. ANIMATION LOOP ---
+        // --- 5. PHYSICS LOOP ---
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-            const time = clock.getElapsedTime();
+            const delta = Math.min(clock.getDelta(), 0.1); // Cap delta to prevent glitches
 
-            // A. Handle Explosion Logic (Smooth Transition)
-            const targetExplosion = isFist ? 1 : 0;
-            explosionFactor += (targetExplosion - explosionFactor) * 5 * delta;
+            // A. Detect Explosion Trigger (Transition from Fist -> Open)
+            let isExploding = false;
+            if (state.wasFist && !state.isFist) {
+                isExploding = true;
+                // UI Flash
+                statusEl.innerText = "💥 BOOM!";
+                statusEl.style.color = "#ff5555";
+                statusEl.style.borderColor = "#ff5555";
+                setTimeout(() => {
+                    statusEl.innerText = "STATUS: IDLE";
+                    statusEl.style.color = "cyan";
+                    statusEl.style.borderColor = "cyan";
+                }, 1000);
+            }
+            state.wasFist = state.isFist;
 
-            // B. Update Every Particle
-            const positions = particleMesh.geometry.attributes.position.array;
-            const colors = particleMesh.geometry.attributes.color.array;
-
-            for(let i=0; i < particlesCount; i++) {
-                const i3 = i*3;
-
-                // Physics: Lerp between Original Sphere Position and Random Explosion Position
-                // Current = Original + (RandomVector * ExplosionStrength)
-                const px = originalPosArray[i3] + (randomArray[i3] * explosionFactor * 2);
-                const py = originalPosArray[i3+1] + (randomArray[i3+1] * explosionFactor * 2);
-                const pz = originalPosArray[i3+2] + (randomArray[i3+2] * explosionFactor * 2);
-
-                // Apply movement
-                positions[i3] = px;
-                positions[i3+1] = py;
-                positions[i3+2] = pz;
-
-                // Color Shift: Blue to Red
-                // Mix colors based on explosionFactor
-                colors[i3] = color1.r + (color2.r - color1.r) * explosionFactor;
-                colors[i3+1] = color1.g + (color2.g - color1.g) * explosionFactor;
-                colors[i3+2] = color1.b + (color2.b - color1.b) * explosionFactor;
+            // B. Visual Status Update
+            if (state.isFist) {
+                statusEl.innerText = "✊ GATHERING...";
+                statusEl.style.background = "rgba(255, 100, 0, 0.2)";
+            } else if (!isExploding && statusEl.innerText.includes("GATHERING")) {
+                statusEl.style.background = "rgba(0, 255, 255, 0.1)";
             }
 
-            particleMesh.geometry.attributes.position.needsUpdate = true;
-            particleMesh.geometry.attributes.color.needsUpdate = true;
+            // C. Update Particles
+            const posAttr = particles.geometry.attributes.position;
+            const colAttr = particles.geometry.attributes.color;
 
-            // C. Global Rotation (Based on hand movement)
-            // We add some automatic spin + hand influence
-            particleMesh.rotation.x += (targetRotX - particleMesh.rotation.x) * 0.1;
-            particleMesh.rotation.y += (targetRotY - particleMesh.rotation.y) * 0.1;
+            // Physics Parameters
+            const gatherStrength = 4.0;
+            const returnStrength = 1.5;
+            const friction = 0.92;
+            const explosionForce = 15.0;
+
+            for(let i = 0; i < count; i++) {
+                const i3 = i * 3;
+                
+                let px = posAttr.array[i3];
+                let py = posAttr.array[i3+1];
+                let pz = posAttr.array[i3+2];
+
+                let vx = velocities[i3];
+                let vy = velocities[i3+1];
+                let vz = velocities[i3+2];
+
+                // 1. EXPLOSION LOGIC
+                if (isExploding) {
+                    // Shoot outwards from center
+                    // Add some randomness so it looks like debris
+                    const dirX = px + (Math.random()-0.5);
+                    const dirY = py + (Math.random()-0.5);
+                    const dirZ = pz + (Math.random()-0.5);
+                    
+                    // Normalize vector roughly
+                    const len = Math.sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ) || 0.01;
+                    
+                    vx += (dirX / len) * explosionForce * (0.5 + Math.random());
+                    vy += (dirY / len) * explosionForce * (0.5 + Math.random());
+                    vz += (dirZ / len) * explosionForce * (0.5 + Math.random());
+                }
+
+                // 2. FIST LOGIC (GATHER)
+                if (state.isFist) {
+                    // Target is Center (0,0,0)
+                    // But we want a small sphere, not a single point
+                    // So we pull towards 0, but if very close, push out slightly (volume)
+                    const distSq = px*px + py*py + pz*pz;
+                    const dist = Math.sqrt(distSq);
+                    
+                    // Pull to center
+                    const pull = -dist * gatherStrength * delta;
+                    
+                    // Normalize direction
+                    const nx = px / (dist || 1);
+                    const ny = py / (dist || 1);
+                    const nz = pz / (dist || 1);
+
+                    vx += nx * pull;
+                    vy += ny * pull;
+                    vz += nz * pull;
+
+                    // Color: Turn Gold/Red
+                    colAttr.array[i3] = THREE.MathUtils.lerp(colAttr.array[i3], color2.r, 0.1);
+                    colAttr.array[i3+1] = THREE.MathUtils.lerp(colAttr.array[i3+1], color2.g, 0.1);
+                    colAttr.array[i3+2] = THREE.MathUtils.lerp(colAttr.array[i3+2], color2.b, 0.1);
+
+                } else {
+                    // 3. OPEN HAND LOGIC (Return to Cloud)
+                    // Pull towards "Home Position"
+                    const hx = homePositions[i3];
+                    const hy = homePositions[i3+1];
+                    const hz = homePositions[i3+2];
+
+                    vx += (hx - px) * returnStrength * delta;
+                    vy += (hy - py) * returnStrength * delta;
+                    vz += (hz - pz) * returnStrength * delta;
+
+                    // Color: Turn Blue
+                    colAttr.array[i3] = THREE.MathUtils.lerp(colAttr.array[i3], color1.r, 0.05);
+                    colAttr.array[i3+1] = THREE.MathUtils.lerp(colAttr.array[i3+1], color1.g, 0.05);
+                    colAttr.array[i3+2] = THREE.MathUtils.lerp(colAttr.array[i3+2], color1.b, 0.05);
+                }
+
+                // Apply Friction
+                vx *= friction;
+                vy *= friction;
+                vz *= friction;
+
+                // Update Position
+                posAttr.array[i3] += vx * delta;
+                posAttr.array[i3+1] += vy * delta;
+                posAttr.array[i3+2] += vz * delta;
+
+                // Save Velocity
+                velocities[i3] = vx;
+                velocities[i3+1] = vy;
+                velocities[i3+2] = vz;
+            }
+
+            posAttr.needsUpdate = true;
+            colAttr.needsUpdate = true;
+
+            // D. Rotation Control (Based on Hand Position)
+            // We rotate the entire container object
+            const targetRotX = state.handY; // Hand Y controls Rotation X (Tilt)
+            const targetRotY = state.handX; // Hand X controls Rotation Y (Spin)
             
-            // Subtle idle rotation
-            particleMesh.rotation.z += 0.002;
-
-            // D. Camera Shake on Explosion
-            if(explosionFactor > 0.1) {
-                const shake = explosionFactor * 0.05;
-                camera.position.x = (Math.random() - 0.5) * shake;
-                camera.position.y = (Math.random() - 0.5) * shake;
-            } else {
-                camera.position.x = 0;
-                camera.position.y = 0;
-            }
+            particles.rotation.x += (targetRotX - particles.rotation.x) * 0.1;
+            particles.rotation.y += (targetRotY - particles.rotation.y) * 0.1;
 
             renderer.render(scene, camera);
         }
