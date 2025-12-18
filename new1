@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Gesture Controller</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .input_video {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            z-index: 2;
+            transform: scaleX(-1);
+            opacity: 0.4;
+            transition: opacity 0.3s;
+        }
+        .input_video:hover { opacity: 1; }
+
+        #status {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffd700;
+            font-size: 18px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            z-index: 10;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 12px 30px;
+            border-radius: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+            width: 300px;
+        }
+
+        .gesture-icon {
+            font-size: 24px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffd700;
+            font-size: 24px;
+            z-index: 20;
+            font-family: monospace;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+    <div id="loading">Loading Super Gestures...</div>
+    <div id="status">
+        <span class="gesture-icon">✋</span>
+        System Ready
+    </div>
+    
+    <video class="input_video"></video>
+    <div id="canvas-container"></div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const PARTICLE_COUNT = 6000;
+        const PARTICLE_SIZE = 0.3;
+        const SPHERE_RADIUS = 3.8;
+        const RING_INNER_RADIUS = 5.5;
+        const RING_OUTER_RADIUS = 10.5;
+        const SCATTER_RADIUS = 40; 
+
+        // --- COLORS (PALETTES) ---
+        const PALETTE_GOLD = {
+            core: {r:1.0, g:0.6, b:0.0}, // Orange Gold
+            outer: {r:0.9, g:0.9, b:1.0} // White Gold
+        };
+
+        const PALETTE_CYBER = {
+            core: {r:0.0, g:1.0, b:1.0}, // Cyan
+            outer: {r:1.0, g:0.0, b:0.8} // Magenta
+        };
+
+        let currentPalette = PALETTE_GOLD;
+        let targetPalette = PALETTE_GOLD;
+
+        // --- THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.003); 
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 3, 22); 
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // --- STARS ---
+        const starGeo = new THREE.BufferGeometry();
+        const starPos = new Float32Array(2000 * 3);
+        for(let i=0; i<6000; i++) starPos[i] = (Math.random() - 0.5) * 200;
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({color: 0x555555, size: 0.1}));
+        scene.add(stars);
+
+        // --- PARTICLES ---
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const saturnPositions = new Float32Array(PARTICLE_COUNT * 3);
+        const scatterPositions = new Float32Array(PARTICLE_COUNT * 3);
+        const colors = new Float32Array(PARTICLE_COUNT * 3);
+
+        // Initialize Shapes
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            const i3 = i * 3;
+            // Saturn
+            let tx, ty, tz;
+            if (Math.random() > 0.4) {
+                const u = Math.random(), v = Math.random();
+                const theta = 2 * Math.PI * u, phi = Math.acos(2 * v - 1);
+                tx = SPHERE_RADIUS * Math.sin(phi) * Math.cos(theta);
+                ty = SPHERE_RADIUS * Math.sin(phi) * Math.sin(theta);
+                tz = SPHERE_RADIUS * Math.cos(phi);
+            } else {
+                const angle = Math.random() * Math.PI * 2;
+                const r = RING_INNER_RADIUS + Math.random() * (RING_OUTER_RADIUS - RING_INNER_RADIUS);
+                tx = Math.cos(angle) * r;
+                ty = (Math.random() - 0.5) * 0.2;
+                tz = Math.sin(angle) * r;
+            }
+            saturnPositions[i3] = tx; saturnPositions[i3+1] = ty; saturnPositions[i3+2] = tz;
+
+            // Scatter
+            const r = Math.random() * SCATTER_RADIUS + 5;
+            const theta = Math.random() * Math.PI * 2, phi = Math.acos((Math.random() * 2) - 1);
+            scatterPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
+            scatterPositions[i3+1] = r * Math.sin(phi) * Math.sin(theta);
+            scatterPositions[i3+2] = r * Math.cos(phi);
+
+            // Init
+            positions[i3] = scatterPositions[i3]; positions[i3+1] = scatterPositions[i3+1]; positions[i3+2] = scatterPositions[i3+2];
+            colors[i3] = 1; colors[i3+1] = 1; colors[i3+2] = 1;
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const sprite = new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/spark1.png');
+        const material = new THREE.PointsMaterial({
+            size: PARTICLE_SIZE,
+            map: sprite,
+            vertexColors: true,
+            transparent: true,
+            opacity: 1,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // --- LOGIC VARS ---
+        let smoothHandOpen = 1.0;
+        let targetHandOpen = 1.0;
+        
+        let smoothRotY = 0;
+        let targetRotY = 0;
+
+        let smoothScale = 1.0;
+        let targetScale = 1.0; // Controlled by Pinch
+
+        // --- ANIMATION ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 1. SMOOTHING
+            smoothHandOpen += (targetHandOpen - smoothHandOpen) * 0.08;
+            smoothRotY += (targetRotY - smoothRotY) * 0.05;
+            smoothScale += (targetScale - smoothScale) * 0.1;
+
+            // 2. COLOR TRANSITION
+            // Interpolate current palette towards target palette
+            const lerpSpeed = 0.05;
+            currentPalette.core.r += (targetPalette.core.r - currentPalette.core.r) * lerpSpeed;
+            currentPalette.core.g += (targetPalette.core.g - currentPalette.core.g) * lerpSpeed;
+            currentPalette.core.b += (targetPalette.core.b - currentPalette.core.b) * lerpSpeed;
+            
+            currentPalette.outer.r += (targetPalette.outer.r - currentPalette.outer.r) * lerpSpeed;
+            currentPalette.outer.g += (targetPalette.outer.g - currentPalette.outer.g) * lerpSpeed;
+            currentPalette.outer.b += (targetPalette.outer.b - currentPalette.outer.b) * lerpSpeed;
+
+            // 3. APPLY TRANSFORMS
+            particles.rotation.y += (smoothRotY - particles.rotation.y) * 0.1;
+            particles.scale.set(smoothScale, smoothScale, smoothScale); // ZOOM EFFECT
+            stars.rotation.y += 0.001;
+
+            // 4. UPDATE PARTICLES
+            const posAttr = geometry.attributes.position;
+            const colAttr = geometry.attributes.color;
+
+            // Determine actual colors based on Open State
+            const cR = currentPalette.core.r * (1 - smoothHandOpen) + currentPalette.outer.r * smoothHandOpen;
+            const cG = currentPalette.core.g * (1 - smoothHandOpen) + currentPalette.outer.g * smoothHandOpen;
+            const cB = currentPalette.core.b * (1 - smoothHandOpen) + currentPalette.outer.b * smoothHandOpen;
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const i3 = i * 3;
+
+                // Mix Positions
+                const tx = saturnPositions[i3] * (1 - smoothHandOpen) + scatterPositions[i3] * smoothHandOpen;
+                const ty = saturnPositions[i3+1] * (1 - smoothHandOpen) + scatterPositions[i3+1] * smoothHandOpen;
+                const tz = saturnPositions[i3+2] * (1 - smoothHandOpen) + scatterPositions[i3+2] * smoothHandOpen;
+
+                positions[i3] += (tx - positions[i3]) * 0.1;
+                positions[i3+1] += (ty - positions[i3+1]) * 0.1;
+                positions[i3+2] += (tz - positions[i3+2]) * 0.1;
+
+                // Alive jitter
+                if (smoothHandOpen < 0.3 && Math.random() > 0.95) {
+                    positions[i3] += (Math.random()-0.5)*0.1;
+                    positions[i3+1] += (Math.random()-0.5)*0.1;
+                }
+
+                colors[i3] = cR; colors[i3+1] = cG; colors[i3+2] = cB;
+            }
+            posAttr.needsUpdate = true;
+            colAttr.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- HAND TRACKING ---
+        const videoElement = document.querySelector('.input_video');
+        const statusEl = document.getElementById('status');
+
+        function onResults(results) {
+            document.getElementById('loading').style.display = 'none';
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const lm = results.multiHandLandmarks[0];
+                const wrist = lm[0];
+                const thumbTip = lm[4];
+                const indexTip = lm[8];
+                const pinkyTip = lm[20];
+
+                // 1. ROTATION (Hand X)
+                targetRotY = (wrist.x - 0.5) * 4;
+
+                // 2. OPENNESS (Avg Distance)
+                const tips = [8, 12, 16, 20];
+                let avgDist = 0;
+                tips.forEach(i => avgDist += Math.hypot(lm[i].x - wrist.x, lm[i].y - wrist.y));
+                avgDist /= 4;
+                let factor = (avgDist - 0.18) / (0.4 - 0.18);
+                targetHandOpen = Math.max(0, Math.min(1, factor));
+
+                // 3. PINCH TO ZOOM (Thumb <-> Index)
+                const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+                // Normal pinch is ~0.03. Wide is ~0.2
+                // Map pinch to Scale (Close = 0.5x, Open = 1.5x)
+                let zoom = (pinchDist - 0.03) * 5; // Scaling factor
+                zoom = Math.max(0.3, Math.min(1.5, zoom + 0.3)); // Clamp
+                targetScale = zoom;
+
+                // 4. COLOR SWITCH (Thumb <-> Pinky)
+                const colorSwitchDist = Math.hypot(thumbTip.x - pinkyTip.x, thumbTip.y - pinkyTip.y);
+                if (colorSwitchDist < 0.05) {
+                    targetPalette = PALETTE_CYBER;
+                    statusEl.innerHTML = "<span class='gesture-icon'>🤘</span>NEON MODE";
+                    statusEl.style.color = "#00ffff";
+                } else {
+                    targetPalette = PALETTE_GOLD;
+                    if(targetHandOpen < 0.2) {
+                        statusEl.innerHTML = "<span class='gesture-icon'>✊</span>CORE STABLE";
+                        statusEl.style.color = "#ffaa00";
+                    } else {
+                        statusEl.innerHTML = "<span class='gesture-icon'>🖐</span>DISPERSING";
+                        statusEl.style.color = "#ffffff";
+                    }
+                }
+
+                // If pinching logic override status
+                if (pinchDist < 0.05) {
+                    statusEl.innerHTML = "<span class='gesture-icon'>🤏</span>ZOOM: " + Math.round(targetScale*100) + "%";
+                }
+
+            } else {
+                targetHandOpen = 1.0;
+                targetRotY = 0;
+                targetScale = 1.0;
+                statusEl.innerHTML = "WAVE HAND";
+                statusEl.style.color = "#aaa";
+            }
+        }
+
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5});
+        hands.onResults(onResults);
+
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => await hands.send({image: videoElement}),
+            width: 640, height: 480
+        });
+        cameraUtils.start();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>
+
