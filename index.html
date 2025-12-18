@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Golden Spin Controller</title>
+    <title>Stable Golden Spin</title>
     <style>
         body {
             margin: 0;
@@ -82,7 +82,7 @@
 </head>
 <body>
 
-    <div id="loading">Initializing Spin Control...</div>
+    <div id="loading">Initializing Stable Core...</div>
     <div id="status">Raise Hand to Spin</div>
     
     <video class="input_video"></video>
@@ -92,7 +92,7 @@
         // --- CONFIGURATION ---
         const PARTICLE_COUNT = 5500;
         const PARTICLE_SIZE = 0.35;
-        const SPHERE_RADIUS = 4.0; // Thoda bada sphere kyuki center me hai
+        const SPHERE_RADIUS = 4.0;
         const RING_INNER_RADIUS = 6.0;
         const RING_OUTER_RADIUS = 11;
         const SCATTER_RADIUS = 35;
@@ -106,7 +106,7 @@
         scene.fog = new THREE.FogExp2(0x000000, 0.005); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 0, 22); // Perfectly centered camera
+        camera.position.set(0, 0, 22);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -146,7 +146,7 @@
         });
 
         const particles = new THREE.Points(geometry, material);
-        particles.position.set(0, 0, 0); // ABSOLUTE CENTER
+        particles.position.set(0, 0, 0); 
         scene.add(particles);
 
         // --- SHAPE GENERATION ---
@@ -176,7 +176,7 @@
                     const xBase = Math.cos(angle) * radius;
                     const zBase = Math.sin(angle) * radius;
                     
-                    // Fixed tilt for visual style
+                    // FIXED: Ring ka apna ek permanent tilt hai taki wo flat na dikhe
                     const tilt = Math.PI * 0.15; 
 
                     tx = xBase;
@@ -230,12 +230,13 @@
             requestAnimationFrame(animate);
             const time = clock.getElapsedTime();
             
-            // --- 1. ROTATION LOGIC (SPIN ONLY) ---
-            // Smoothly rotate to target angle based on hand position
+            // --- 1. ROTATION LOGIC ---
+            // Y Rotation (Left/Right Spin) is strong
             particles.rotation.y += (targetRotY - particles.rotation.y) * 0.08;
-            particles.rotation.x += (targetRotX - particles.rotation.x) * 0.08;
             
-            // NOTE: No position update here, so it stays in center!
+            // X Rotation (Tilt) is now VERY subtle/stable
+            // We use a smaller interpolation factor (0.05) and clamped values
+            particles.rotation.x += (targetRotX - particles.rotation.x) * 0.05;
 
             const positionAttribute = geometry.attributes.position;
             
@@ -274,15 +275,14 @@
                 const landmarks = results.multiHandLandmarks[0];
                 const wrist = landmarks[0];
 
-                // --- ROTATION MAPPING ---
-                // Wrist X goes from 0 (left) to 1 (right). 
-                // We want rotation from -2 to +2 radians approx.
-                // Multiply by -1 to mirror movement (Hand Left = Spin Left)
-                targetRotY = (wrist.x - 0.5) * 4; 
+                // --- ROTATION MAPPING (FIXED) ---
+                // Left/Right Spin:
+                targetRotY = (wrist.x - 0.5) * 5; 
                 
-                // Wrist Y goes from 0 (top) to 1 (bottom).
-                // Hand Up (small y) -> Tilt Up
-                targetRotX = (wrist.y - 0.5) * 4;
+                // Up/Down Tilt: 
+                // Pehle ye factor 4 tha, ab maine isse 1 kar diya hai.
+                // Iska matlab agar haath thoda upar/neeche hai, to sphere jyada tilt nahi hoga.
+                targetRotX = (wrist.y - 0.5) * 1.0; 
 
                 // Fist Detection
                 const tips = [8, 12, 16, 20];
@@ -297,7 +297,7 @@
                 if (avgDist < 0.25) { 
                     if(currentState !== 'SATURN') {
                         setShape('SATURN');
-                        statusEl.innerText = "ROTATION ACTIVE";
+                        statusEl.innerText = "SPIN ACTIVE";
                         statusEl.style.textShadow = "0 0 20px #ffd700";
                     }
                 } else { 
@@ -308,7 +308,6 @@
                     }
                 }
             } else {
-                // No Hand: Reset Rotation slowly
                 targetRotX = 0;
                 targetRotY = 0;
                 statusEl.innerText = "WAVE HAND";
