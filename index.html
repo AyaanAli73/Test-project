@@ -2,387 +2,388 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Neon Atomic Spinner (Optimized)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Vision AI -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Particle Saturn</title>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background-color: #000; 
-            touch-action: none;
-            font-family: 'Courier New', Courier, monospace;
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505; /* Deep space black */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        canvas { 
-            display: block; 
-            /* Ensure canvas doesn't stretch via CSS layout */
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
+            z-index: 1;
         }
-        #videoElement { display: none; transform: scaleX(-1); }
-        
-        /* HUD UI */
-        .hud {
-            position: fixed;
+
+        /* Small video preview to see yourself (optional, helpful for debugging) */
+        .input_video {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            width: 160px;
+            height: 120px;
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            z-index: 2;
+            transform: scaleX(-1); /* Mirror effect */
+            opacity: 0.5;
+            transition: opacity 0.3s;
+        }
+        .input_video:hover {
+            opacity: 1;
+        }
+
+        #status {
+            position: absolute;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            display: flex;
-            gap: 10px;
-            z-index: 10;
-        }
-        .pill {
-            background: rgba(0,0,0,0.7);
-            border: 1px solid #333;
-            color: #0f0;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 12px;
+            color: white;
+            font-size: 24px;
+            font-weight: 300;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
-            transition: all 0.2s;
+            letter-spacing: 4px;
+            z-index: 10;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 20px;
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none;
         }
-        
-        .loading {
-            position: fixed;
-            inset: 0;
-            background: #000;
-            color: #0f0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-            transition: opacity 0.5s;
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #00ffff;
+            font-size: 20px;
+            z-index: 20;
+            font-family: monospace;
+            animation: pulse 1s infinite;
         }
-        
-        .preview-box {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 100px;
-            height: 75px;
-            border: 1px solid #333;
-            background: #111;
-            opacity: 0.5;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        .preview-box video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transform: scaleX(-1);
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
     </style>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <!-- Loading Screen -->
-    <div id="loader" class="loading">
-        <div class="text-4xl font-bold mb-4 animate-pulse">SYSTEM START</div>
-        <div class="text-xs text-gray-500">OPTIMIZING GPU...</div>
-    </div>
-
-    <!-- Canvas -->
-    <canvas id="canvas"></canvas>
-
-    <!-- Hidden Video -->
-    <video id="videoElement" playsinline></video>
+    <div id="loading">Initializing Neural Hand Tracking...</div>
+    <div id="status">Waiting for Hand...</div>
     
-    <!-- Camera Preview -->
-    <div class="preview-box">
-        <video id="previewVideo" playsinline muted autoplay></video>
-    </div>
-
-    <!-- Status HUD -->
-    <div class="hud">
-        <div id="statusBadge" class="pill border-gray-600 text-gray-500">NO HAND</div>
-        <div id="energyBadge" class="pill border-blue-900 text-blue-400">0% CHARGE</div>
-    </div>
+    <!-- Video element for MediaPipe (Hidden but active) -->
+    <video class="input_video"></video>
+    
+    <!-- 3D Canvas -->
+    <div id="canvas-container"></div>
 
     <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d', { alpha: false }); // Optimize for no transparency on canvas background
-        const videoElement = document.getElementById('videoElement');
-        const previewVideo = document.getElementById('previewVideo');
+        // --- CONFIGURATION ---
+        const PARTICLE_COUNT = 8000;
+        const PARTICLE_SIZE = 0.08;
+        const SPHERE_RADIUS = 3;
+        const RING_INNER_RADIUS = 4.5;
+        const RING_OUTER_RADIUS = 8;
+        const SCATTER_RADIUS = 25;
         
-        // UI Elements
-        const statusBadge = document.getElementById('statusBadge');
-        const energyBadge = document.getElementById('energyBadge');
-        const loader = document.getElementById('loader');
+        // Colors
+        const COLOR_SPHERE = new THREE.Color(0x00ffff); // Cyan
+        const COLOR_RING = new THREE.Color(0xff00ff);   // Magenta
+        const COLOR_SCATTER = new THREE.Color(0xaaaaaa); // White/Grey
 
-        // Configuration
-        const PARTICLE_COUNT = 400; 
-        const RINGS = 3; 
-        
-        // State
-        let width, height;
-        let hand = { x: 0, y: 0, active: false, pinching: false };
-        let particles = [];
-        let globalHue = 0;
+        // --- THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        // Add some soft fog for depth
+        scene.fog = new THREE.FogExp2(0x050505, 0.03);
 
-        // --- High DPI Scaling ---
-        function resize() {
-            // Get the device pixel ratio, falling back to 1.
-            const dpr = window.devicePixelRatio || 1;
-            
-            // Get the size of the canvas in CSS pixels.
-            const rect = canvas.getBoundingClientRect();
-            
-            // Give the canvas pixel dimensions of their CSS
-            // size * the device pixel ratio.
-            canvas.width = window.innerWidth * dpr;
-            canvas.height = window.innerHeight * dpr;
-            
-            // Scale all drawing operations by the dpr, so you
-            // don't have to worry about the difference.
-            ctx.scale(dpr, dpr);
-            
-            // Update logic vars
-            width = window.innerWidth;
-            height = window.innerHeight;
-            
-            // Reset composite operation after resize as context state might reset
-            ctx.globalCompositeOperation = 'lighter';
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 15;
+        camera.position.y = 2;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Performance optimization
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // --- PARTICLE SYSTEM ---
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const colors = new Float32Array(PARTICLE_COUNT * 3);
+        const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
+        const targetColors = new Float32Array(PARTICLE_COUNT * 3);
+
+        // Initialize particles randomly scattered
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            const x = (Math.random() - 0.5) * 50;
+            const y = (Math.random() - 0.5) * 50;
+            const z = (Math.random() - 0.5) * 50;
+
+            positions[i * 3] = x;
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
+
+            // Start white
+            colors[i * 3] = 1;
+            colors[i * 3 + 1] = 1;
+            colors[i * 3 + 2] = 1;
         }
-        window.addEventListener('resize', resize);
-        
-        // Call resize initially
-        setTimeout(resize, 100);
 
-        // --- Particle Class ---
-        class Particle {
-            constructor() {
-                this.reset();
-            }
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-            reset() {
-                this.ringIndex = Math.floor(Math.random() * RINGS);
-                this.angle = Math.random() * Math.PI * 2;
-                this.speed = 0.05 + Math.random() * 0.05;
-                this.state = 'ORBIT'; 
-                
-                this.x = 0;
-                this.y = 0;
-                this.vx = 0;
-                this.vy = 0;
-                
-                // Slightly larger particles for better neon look without blur
-                this.size = 2 + Math.random() * 3;
-            }
+        // Use a glowing texture for particles
+        const sprite = new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/disc.png');
 
-            update(handX, handY, isPinching) {
-                if (this.state === 'EXPLODE') {
-                    this.x += this.vx;
-                    this.y += this.vy;
+        const material = new THREE.PointsMaterial({
+            size: PARTICLE_SIZE,
+            map: sprite,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // --- SHAPE GENERATION FUNCTIONS ---
+
+        // 1. Generate Target: Saturn (Sphere + Ring)
+        function generateSaturnTargets() {
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const i3 = i * 3;
+                let tx, ty, tz;
+                let r, g, b;
+
+                // 70% of particles form the Sphere, 30% form the Ring
+                if (Math.random() > 0.3) {
+                    // SPHERE LOGIC
+                    // Uniform point on sphere surface
+                    const u = Math.random();
+                    const v = Math.random();
+                    const theta = 2 * Math.PI * u;
+                    const phi = Math.acos(2 * v - 1);
                     
-                    this.vx *= 0.98;
-                    this.vy *= 0.98;
-                    
-                    if (this.x < 0 || this.x > width) {
-                        this.vx *= -0.8;
-                        this.x = Math.max(0, Math.min(width, this.x));
-                    }
-                    if (this.y < 0 || this.y > height) {
-                        this.vy *= -0.8;
-                        this.y = Math.max(0, Math.min(height, this.y));
-                    }
+                    tx = SPHERE_RADIUS * Math.sin(phi) * Math.cos(theta);
+                    ty = SPHERE_RADIUS * Math.sin(phi) * Math.sin(theta);
+                    tz = SPHERE_RADIUS * Math.cos(phi);
 
-                    if (Math.abs(this.vx) < 0.5 && Math.abs(this.vy) < 0.5 && hand.active) {
-                        this.state = 'ORBIT';
-                    }
-
+                    r = COLOR_SPHERE.r;
+                    g = COLOR_SPHERE.g;
+                    b = COLOR_SPHERE.b;
                 } else {
-                    const cx = handX;
-                    const cy = handY;
-
-                    const speedMultiplier = isPinching ? 0.3 : 0.05;
-                    this.angle += this.speed + speedMultiplier;
-
-                    let targetRadius = isPinching ? 20 : 120;
-                    targetRadius += Math.sin(Date.now() / 200) * 10;
-
-                    let ox, oy;
+                    // RING LOGIC
+                    const angle = Math.random() * Math.PI * 2;
+                    // Distribute radius to make ring look solid
+                    const radius = RING_INNER_RADIUS + Math.random() * (RING_OUTER_RADIUS - RING_INNER_RADIUS);
                     
-                    if (this.ringIndex === 0) {
-                        ox = Math.cos(this.angle) * targetRadius;
-                        oy = Math.sin(this.angle) * (targetRadius * 0.3); 
-                    } else if (this.ringIndex === 1) {
-                        const a = this.angle;
-                        const r = targetRadius;
-                        const xRaw = Math.cos(a) * r;
-                        const yRaw = Math.sin(a) * (r * 0.3);
-                        ox = xRaw * 0.5 - yRaw * 0.866;
-                        oy = xRaw * 0.866 + yRaw * 0.5;
-                    } else {
-                        const a = this.angle;
-                        const r = targetRadius;
-                        const xRaw = Math.cos(a) * r;
-                        const yRaw = Math.sin(a) * (r * 0.3);
-                        ox = xRaw * 0.5 + yRaw * 0.866;
-                        oy = -xRaw * 0.866 + yRaw * 0.5;
-                    }
+                    tx = Math.cos(angle) * radius;
+                    ty = (Math.random() - 0.5) * 0.2; // Very thin height
+                    tz = Math.sin(angle) * radius;
 
-                    this.x = cx + ox;
-                    this.y = cy + oy;
-                }
-            }
+                    // Tilt the ring slightly for 3D effect
+                    const tiltAngle = Math.PI / 6; // 30 degrees
+                    const yTemp = ty * Math.cos(tiltAngle) - tz * Math.sin(tiltAngle);
+                    const zTemp = ty * Math.sin(tiltAngle) + tz * Math.cos(tiltAngle);
+                    ty = yTemp;
+                    tz = zTemp;
 
-            draw(ctx) {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                
-                if (this.state === 'EXPLODE') {
-                    ctx.fillStyle = '#ffffff'; 
-                } else if (hand.pinching) {
-                    ctx.fillStyle = '#ff0044'; 
-                } else {
-                    const ringHue = (globalHue + (this.ringIndex * 120)) % 360;
-                    ctx.fillStyle = `hsl(${ringHue}, 100%, 60%)`;
+                    r = COLOR_RING.r;
+                    g = COLOR_RING.g;
+                    b = COLOR_RING.b;
                 }
+
+                targetPositions[i3] = tx;
+                targetPositions[i3 + 1] = ty;
+                targetPositions[i3 + 2] = tz;
                 
-                ctx.fill();
-            }
-            
-            explode() {
-                this.state = 'EXPLODE';
-                const dx = this.x - hand.x;
-                const dy = this.y - hand.y;
-                const dist = Math.sqrt(dx*dx + dy*dy) || 1; 
-                
-                const speed = 15 + Math.random() * 25;
-                this.vx = (dx / dist) * speed;
-                this.vy = (dy / dist) * speed;
+                targetColors[i3] = r;
+                targetColors[i3 + 1] = g;
+                targetColors[i3 + 2] = b;
             }
         }
 
-        for(let i=0; i<PARTICLE_COUNT; i++) {
-            particles.push(new Particle());
+        // 2. Generate Target: Scattered (Open Hand)
+        function generateScatterTargets() {
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const i3 = i * 3;
+                
+                // Random drift vector
+                const u = Math.random();
+                const v = Math.random();
+                const theta = 2 * Math.PI * u;
+                const phi = Math.acos(2 * v - 1);
+                const r = Math.random() * SCATTER_RADIUS + 5; // Minimum distance 5
+
+                targetPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
+                targetPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+                targetPositions[i3 + 2] = r * Math.cos(phi);
+
+                // Pale colors for scattered state
+                targetColors[i3] = COLOR_SCATTER.r;
+                targetColors[i3 + 1] = COLOR_SCATTER.g;
+                targetColors[i3 + 2] = COLOR_SCATTER.b;
+            }
         }
 
-        // --- Animation Loop ---
+        // --- STATE MANAGEMENT ---
+        let currentState = 'SCATTER'; // 'SATURN' or 'SCATTER'
+        
+        // Initial State
+        generateScatterTargets();
+
+        function setShape(shape) {
+            if (currentState === shape) return;
+            currentState = shape;
+
+            if (shape === 'SATURN') {
+                document.getElementById('status').innerText = "FIST DETECTED: FORMING PLANET";
+                document.getElementById('status').style.color = "#00ffff";
+                generateSaturnTargets();
+            } else {
+                document.getElementById('status').innerText = "HAND OPEN: SCATTERING";
+                document.getElementById('status').style.color = "#ffffff";
+                generateScatterTargets();
+            }
+        }
+
+        // --- ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+        let time = 0;
+
         function animate() {
-            // Set Blend Mode to Source-Over to draw the fade rect
-            ctx.globalCompositeOperation = 'source-over';
-            
-            // Clear screen with opacity for trail effect
-            // We use fillRect instead of clearRect to create trails
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)'; // Higher opacity = shorter trails, less blurry mess
-            ctx.fillRect(0, 0, width, height);
-
-            // Set Blend Mode to Lighter for Neon Glow effect
-            // This is the key performance trick. Overlapping circles become brighter.
-            ctx.globalCompositeOperation = 'lighter';
-
-            globalHue += 1;
-
-            if (hand.wasPinching && !hand.pinching && hand.active) {
-                particles.forEach(p => p.explode());
-                // Simple flash
-                ctx.fillStyle = 'rgba(255,255,255,0.8)';
-                ctx.fillRect(0,0,width,height);
-            }
-            hand.wasPinching = hand.pinching;
-
-            particles.forEach(p => {
-                const tx = hand.active ? hand.x : width/2;
-                const ty = hand.active ? hand.y : height/2;
-                
-                p.update(tx, ty, hand.pinching);
-                p.draw(ctx);
-            });
-            
-            // Draw Core
-            if (hand.active) {
-                const coreSize = hand.pinching ? 15 : 8;
-                const shake = hand.pinching ? (Math.random() - 0.5) * 5 : 0;
-                
-                ctx.beginPath();
-                ctx.arc(hand.x + shake, hand.y + shake, coreSize, 0, Math.PI * 2);
-                ctx.fillStyle = hand.pinching ? '#ff0000' : '#ffffff';
-                ctx.fill();
-            }
-
             requestAnimationFrame(animate);
+            time += clock.getDelta();
+
+            const positionAttribute = geometry.attributes.position;
+            const colorAttribute = geometry.attributes.color;
+
+            // Lerp speed: How fast particles move to target (0.05 is slow/smooth, 0.1 is snappy)
+            const lerpFactor = 0.08;
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const i3 = i * 3;
+
+                // 1. Move Position smoothly towards target
+                positions[i3]     += (targetPositions[i3] - positions[i3]) * lerpFactor;
+                positions[i3 + 1] += (targetPositions[i3 + 1] - positions[i3 + 1]) * lerpFactor;
+                positions[i3 + 2] += (targetPositions[i3 + 2] - positions[i3 + 2]) * lerpFactor;
+
+                // 2. Add some "life" (noise/wobble) so they aren't perfectly static
+                if (currentState === 'SATURN') {
+                    // Spin the ring
+                    if (i % 2 === 0) { // Simple check to identify ring vs sphere roughly (randomized earlier but this adds noise everywhere)
+                         // A subtle orbit rotation could be added here mathematically, 
+                         // but for simplicity we add a tiny jitter
+                         positions[i3] += (Math.random() - 0.5) * 0.02;
+                         positions[i3+1] += (Math.random() - 0.5) * 0.02;
+                         positions[i3+2] += (Math.random() - 0.5) * 0.02;
+                    }
+                } else {
+                    // Drifting effect when scattered
+                    positions[i3] += Math.sin(time + i) * 0.01;
+                    positions[i3+1] += Math.cos(time + i * 0.5) * 0.01;
+                }
+
+                // 3. Morph Color
+                colors[i3]     += (targetColors[i3] - colors[i3]) * 0.05;
+                colors[i3 + 1] += (targetColors[i3 + 1] - colors[i3 + 1]) * 0.05;
+                colors[i3 + 2] += (targetColors[i3 + 2] - colors[i3 + 2]) * 0.05;
+            }
+
+            positionAttribute.needsUpdate = true;
+            colorAttribute.needsUpdate = true;
+
+            // Rotate the entire system slowly
+            particles.rotation.y += 0.002;
+            if (currentState === 'SATURN') {
+                particles.rotation.z = Math.sin(time * 0.5) * 0.1; // Gentle bobbing
+            }
+
+            renderer.render(scene, camera);
         }
+
         animate();
 
-
-        // --- MediaPipe Hand Tracking ---
+        // --- MEDIAPIPE HAND TRACKING ---
+        const videoElement = document.querySelector('.input_video');
         
         function onResults(results) {
-            if(loader.style.opacity !== '0') {
-                loader.style.opacity = '0';
-                setTimeout(() => loader.style.display = 'none', 500);
-            }
+            document.getElementById('loading').style.display = 'none';
 
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
-                const index = landmarks[8];
-                const thumb = landmarks[4];
 
-                const targetX = (1 - index.x) * width;
-                const targetY = index.y * height;
-
-                hand.x += (targetX - hand.x) * 0.4;
-                hand.y += (targetY - hand.y) * 0.4;
-                hand.active = true;
-
-                const dx = index.x - thumb.x;
-                const dy = index.y - thumb.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
+                // DETECT GESTURE
+                // We calculate the average distance of finger tips to the wrist (landmark 0)
                 
-                hand.pinching = dist < 0.05;
+                const wrist = landmarks[0];
+                const tips = [8, 12, 16, 20]; // Index, Middle, Ring, Pinky tips
+                
+                let avgDist = 0;
+                
+                tips.forEach(tipIndex => {
+                    const tip = landmarks[tipIndex];
+                    // Simple Euclidean distance (ignoring Z for simplicity, or include it)
+                    const dx = tip.x - wrist.x;
+                    const dy = tip.y - wrist.y;
+                    const dz = tip.z - wrist.z; // Z is depth relative to wrist
+                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    avgDist += dist;
+                });
+                
+                avgDist = avgDist / tips.length;
 
-                statusBadge.textContent = "ATOM ACTIVE";
-                statusBadge.style.color = "#0f0";
-                statusBadge.style.borderColor = "#0f0";
-                statusBadge.style.boxShadow = "0 0 15px rgba(0,255,0,0.3)";
+                // Threshold: Experimentally, < 0.2 is usually a fist, > 0.3 is open
+                // console.log("Hand Openness:", avgDist); // Uncomment to debug
 
-                if (hand.pinching) {
-                    energyBadge.textContent = "CRITICAL MASS";
-                    energyBadge.style.color = "#fff";
-                    energyBadge.style.backgroundColor = "#f00";
-                    energyBadge.style.borderColor = "#f00";
+                if (avgDist < 0.25) {
+                    setShape('SATURN');
                 } else {
-                    energyBadge.textContent = "STABLE";
-                    energyBadge.style.color = "#0ff";
-                    energyBadge.style.backgroundColor = "transparent";
-                    energyBadge.style.borderColor = "#0ff";
+                    setShape('SCATTER');
                 }
 
             } else {
-                hand.active = false;
-                statusBadge.textContent = "NO HAND";
-                statusBadge.style.color = "#555";
-                statusBadge.style.borderColor = "#333";
-                statusBadge.style.boxShadow = "none";
-                energyBadge.textContent = "---";
+                // No hands detected? default to scatter
+                // setShape('SCATTER'); 
+                document.getElementById('status').innerText = "SHOW YOUR HAND";
+                document.getElementById('status').style.color = "#aaaaaa";
             }
         }
 
         const hands = new Hands({locateFile: (file) => {
             return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
         }});
-        
+
         hands.setOptions({
             maxNumHands: 1,
             modelComplexity: 1,
-            minDetectionConfidence: 0.5, // Slightly lower for faster detection
+            minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
-        
+
         hands.onResults(onResults);
 
-        const camera = new Camera(videoElement, {
+        const cameraUtils = new Camera(videoElement, {
             onFrame: async () => {
                 await hands.send({image: videoElement});
             },
@@ -390,14 +391,16 @@
             height: 480
         });
 
-        videoElement.addEventListener('loadeddata', () => {
-            if(videoElement.srcObject) previewVideo.srcObject = videoElement.srcObject;
-        });
+        cameraUtils.start();
 
-        camera.start();
+        // Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
 
     </script>
 </body>
 </html>
-
 
