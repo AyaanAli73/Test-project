@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Straight Golden Spin</title>
+    <title>Proportional Golden Controller</title>
     <style>
         body {
             margin: 0;
@@ -82,8 +82,8 @@
 </head>
 <body>
 
-    <div id="loading">Initializing System...</div>
-    <div id="status">Raise Hand to Spin</div>
+    <div id="loading">Initializing Analog System...</div>
+    <div id="status">Flex Hand to Control</div>
     
     <video class="input_video"></video>
     <div id="canvas-container"></div>
@@ -95,7 +95,7 @@
         const SPHERE_RADIUS = 4.0;
         const RING_INNER_RADIUS = 6.0;
         const RING_OUTER_RADIUS = 11;
-        const SCATTER_RADIUS = 35;
+        const SCATTER_RADIUS = 40; // Max scatter distance
         
         // --- COLORS ---
         const COLOR_GOLD_BRIGHT = new THREE.Color(0xffd700); 
@@ -106,33 +106,83 @@
         scene.fog = new THREE.FogExp2(0x000000, 0.005); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // CAMERA POSITION:
-        // x=0 (Center)
-        // y=4 (Raised slightly so we can see the ring shape, otherwise it looks like a line)
-        // z=22 (Distance)
-        camera.position.set(0, 4, 22); 
-        camera.lookAt(0, 0, 0); // Always look at the center sphere
+        // Fixed Camera Position (Same as before: Straight & Centered)
+        camera.position.set(0, 4, 22);
+        camera.lookAt(0, 0, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(window.devicePixelRatio); 
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        // --- PARTICLE SYSTEM ---
+        // --- PARTICLE DATA STRUCTURES ---
         const geometry = new THREE.BufferGeometry();
+        
+        // We need 3 Arrays:
+        // 1. Current Positions (Rendered)
+        // 2. Saturn Positions (Shape A)
+        // 3. Scatter Positions (Shape B)
         const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const saturnPositions = new Float32Array(PARTICLE_COUNT * 3);
+        const scatterPositions = new Float32Array(PARTICLE_COUNT * 3);
+        
         const colors = new Float32Array(PARTICLE_COUNT * 3);
-        const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
+        
+        // --- INITIALIZE SHAPES ---
+        // Pre-calculate both shapes so we can blend between them instantly
         
         for (let i = 0; i < PARTICLE_COUNT; i++) {
-            positions[i * 3] = (Math.random() - 0.5) * 60;
-            positions[i * 3 + 1] = (Math.random() - 0.5) * 60;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 60;
+            const i3 = i * 3;
 
-            colors[i * 3] = COLOR_GOLD_BRIGHT.r;
-            colors[i * 3 + 1] = COLOR_GOLD_BRIGHT.g;
-            colors[i * 3 + 2] = COLOR_GOLD_BRIGHT.b;
+            // --- 1. GENERATE SATURN (Shape A) ---
+            let tx, ty, tz;
+            let col;
+
+            if (Math.random() > 0.4) {
+                // SPHERE PART
+                const u = Math.random();
+                const v = Math.random();
+                const theta = 2 * Math.PI * u;
+                const phi = Math.acos(2 * v - 1);
+                
+                tx = SPHERE_RADIUS * Math.sin(phi) * Math.cos(theta);
+                ty = SPHERE_RADIUS * Math.sin(phi) * Math.sin(theta);
+                tz = SPHERE_RADIUS * Math.cos(phi);
+                col = COLOR_GOLD_DEEP;
+            } else {
+                // RING PART (Flat/Straight)
+                const angle = Math.random() * Math.PI * 2;
+                const radius = RING_INNER_RADIUS + Math.random() * (RING_OUTER_RADIUS - RING_INNER_RADIUS);
+                
+                tx = Math.cos(angle) * radius;
+                ty = (Math.random() - 0.5) * 0.4; // Flat ring
+                tz = Math.sin(angle) * radius;
+                col = COLOR_GOLD_BRIGHT;
+            }
+
+            saturnPositions[i3] = tx;
+            saturnPositions[i3 + 1] = ty;
+            saturnPositions[i3 + 2] = tz;
+            
+            // Set Color based on Saturn shape (Always Gold)
+            colors[i3] = col.r;
+            colors[i3+1] = col.g;
+            colors[i3+2] = col.b;
+
+            // --- 2. GENERATE SCATTER (Shape B) ---
+            // Random explosion outwards
+            const r = Math.random() * SCATTER_RADIUS + 5;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos((Math.random() * 2) - 1);
+
+            scatterPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
+            scatterPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+            scatterPositions[i3 + 2] = r * Math.cos(phi);
+
+            // Start positions at Scatter (Assuming hand starts open)
+            positions[i3] = scatterPositions[i3];
+            positions[i3 + 1] = scatterPositions[i3 + 1];
+            positions[i3 + 2] = scatterPositions[i3 + 2];
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -152,76 +202,11 @@
         });
 
         const particles = new THREE.Points(geometry, material);
-        particles.position.set(0, 0, 0); 
         scene.add(particles);
 
-        // --- SHAPE GENERATION ---
-
-        function generateSaturnTargets() {
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                const i3 = i * 3;
-                let tx, ty, tz;
-                let col;
-
-                if (Math.random() > 0.4) {
-                    // SPHERE
-                    const u = Math.random();
-                    const v = Math.random();
-                    const theta = 2 * Math.PI * u;
-                    const phi = Math.acos(2 * v - 1);
-                    
-                    tx = SPHERE_RADIUS * Math.sin(phi) * Math.cos(theta);
-                    ty = SPHERE_RADIUS * Math.sin(phi) * Math.sin(theta);
-                    tz = SPHERE_RADIUS * Math.cos(phi);
-                    col = COLOR_GOLD_DEEP; 
-                } else {
-                    // RING
-                    const angle = Math.random() * Math.PI * 2;
-                    const radius = RING_INNER_RADIUS + Math.random() * (RING_OUTER_RADIUS - RING_INNER_RADIUS);
-                    
-                    // STRAIGHT: No Tilt math here. 
-                    // Just basic circle on the X-Z plane.
-                    tx = Math.cos(angle) * radius;
-                    ty = (Math.random() - 0.5) * 0.4; // Small height for thickness
-                    tz = Math.sin(angle) * radius;
-
-                    col = COLOR_GOLD_BRIGHT;
-                }
-
-                targetPositions[i3] = tx;
-                targetPositions[i3 + 1] = ty;
-                targetPositions[i3 + 2] = tz;
-
-                colors[i3] = col.r;
-                colors[i3+1] = col.g;
-                colors[i3+2] = col.b;
-            }
-            geometry.attributes.color.needsUpdate = true;
-        }
-
-        function generateScatterTargets() {
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                const i3 = i * 3;
-                const r = Math.random() * SCATTER_RADIUS + 5;
-                const theta = Math.random() * Math.PI * 2;
-                const phi = Math.acos((Math.random() * 2) - 1);
-
-                targetPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
-                targetPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-                targetPositions[i3 + 2] = r * Math.cos(phi);
-                
-                colors[i3] = COLOR_GOLD_BRIGHT.r;
-                colors[i3+1] = COLOR_GOLD_BRIGHT.g;
-                colors[i3+2] = COLOR_GOLD_BRIGHT.b;
-            }
-            geometry.attributes.color.needsUpdate = true;
-        }
-
-        // --- INTERACTION ---
-        let currentState = 'SCATTER';
-        generateScatterTargets();
-
-        let targetRotY = 0;
+        // --- INTERACTION VARIABLES ---
+        let handOpenFactor = 1.0; // 0.0 = Fist (Saturn), 1.0 = Open (Scatter)
+        let targetRotY = 0; // Spin Control
 
         // --- ANIMATION LOOP ---
         const clock = new THREE.Clock();
@@ -230,12 +215,9 @@
             requestAnimationFrame(animate);
             const time = clock.getElapsedTime();
             
-            // --- 1. ROTATION LOGIC ---
-            // Only Y Rotation (Spin)
-            particles.rotation.y += (targetRotY - particles.rotation.y) * 0.08;
-            
-            // Ensure ZERO tilt
-            particles.rotation.x = 0;
+            // Spin Logic
+            particles.rotation.y += (targetRotY - particles.rotation.y) * 0.1;
+            particles.rotation.x = 0; // No Tilt
             particles.rotation.z = 0;
 
             const positionAttribute = geometry.attributes.position;
@@ -243,18 +225,30 @@
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 const i3 = i * 3;
 
-                // Move towards target shape
-                positions[i3]     += (targetPositions[i3] - positions[i3]) * 0.1;
-                positions[i3 + 1] += (targetPositions[i3 + 1] - positions[i3 + 1]) * 0.1;
-                positions[i3 + 2] += (targetPositions[i3 + 2] - positions[i3 + 2]) * 0.1;
+                // --- KEY LOGIC: BLENDING ---
+                // We calculate a "Mixed Target" based on handOpenFactor
+                // Formula: Target = Saturn * (1 - factor) + Scatter * (factor)
+                
+                const mixedTx = saturnPositions[i3] * (1 - handOpenFactor) + scatterPositions[i3] * handOpenFactor;
+                const mixedTy = saturnPositions[i3+1] * (1 - handOpenFactor) + scatterPositions[i3+1] * handOpenFactor;
+                const mixedTz = saturnPositions[i3+2] * (1 - handOpenFactor) + scatterPositions[i3+2] * handOpenFactor;
 
-                // Alive Effect
-                if (currentState === 'SATURN') {
-                    if (Math.abs(positions[i3+1]) < 2) { 
-                         positions[i3] += (Math.random() - 0.5) * 0.05;
+                // Move current position towards the Mixed Target smoothly
+                // 0.1 is the speed of reaction
+                positions[i3]     += (mixedTx - positions[i3]) * 0.1;
+                positions[i3 + 1] += (mixedTy - positions[i3 + 1]) * 0.1;
+                positions[i3 + 2] += (mixedTz - positions[i3 + 2]) * 0.1;
+
+                // Add subtle life/breathing effect
+                // If mostly Saturn (factor close to 0), shimmer slightly
+                if (handOpenFactor < 0.2) {
+                    if (Math.random() > 0.99) {
+                         positions[i3] += (Math.random() - 0.5) * 0.1;
                     }
-                } else {
-                    positions[i3+1] += Math.sin(time * 2 + positions[i3]) * 0.02;
+                } 
+                // If scattered, float slowly
+                else {
+                    positions[i3+1] += Math.sin(time + positions[i3]) * 0.01;
                 }
             }
             positionAttribute.needsUpdate = true;
@@ -275,43 +269,60 @@
                 const landmarks = results.multiHandLandmarks[0];
                 const wrist = landmarks[0];
 
-                // --- ROTATION MAPPING ---
-                // Left/Right Spin Only
+                // --- 1. SPIN CONTROL ---
                 targetRotY = (wrist.x - 0.5) * 5; 
-                
-                // Fist Detection
+
+                // --- 2. OPENNESS DETECTION (ANALOG) ---
                 const tips = [8, 12, 16, 20];
                 let avgDist = 0;
                 tips.forEach(tipIndex => {
                     const tip = landmarks[tipIndex];
+                    // Distance from wrist
                     const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
                     avgDist += d;
                 });
                 avgDist = avgDist / tips.length;
 
-                if (avgDist < 0.25) { 
-                    if(currentState !== 'SATURN') {
-                        setShape('SATURN');
-                        statusEl.innerText = "SPIN ACTIVE";
-                        statusEl.style.textShadow = "0 0 20px #ffd700";
-                    }
-                } else { 
-                    if(currentState !== 'SCATTER') {
-                        setShape('SCATTER');
-                        statusEl.innerText = "DISPERSED";
-                        statusEl.style.textShadow = "none";
-                    }
+                // Calibration:
+                // Fist is usually around 0.15 - 0.20
+                // Open Hand is usually > 0.40
+                
+                const minVal = 0.15; // Tight Fist
+                const maxVal = 0.45; // Fully Open
+                
+                // Map avgDist to 0.0 - 1.0 range
+                let rawFactor = (avgDist - minVal) / (maxVal - minVal);
+                
+                // Clamp values between 0 and 1
+                if (rawFactor < 0) rawFactor = 0;
+                if (rawFactor > 1) rawFactor = 1;
+
+                // Set global factor for animation loop
+                handOpenFactor = rawFactor;
+
+                // --- STATUS TEXT UPDATE ---
+                if (handOpenFactor < 0.1) {
+                    statusEl.innerText = "LOCKED (0%)";
+                    statusEl.style.textShadow = "0 0 20px #ffd700";
+                    statusEl.style.color = "#fff";
+                } else if (handOpenFactor > 0.9) {
+                    statusEl.innerText = "SCATTERED (100%)";
+                    statusEl.style.textShadow = "none";
+                    statusEl.style.color = "#aaa";
+                } else {
+                    // Show percentage
+                    const percent = Math.round(handOpenFactor * 100);
+                    statusEl.innerText = `EXPANDING: ${percent}%`;
+                    statusEl.style.textShadow = `0 0 ${20 * (1-handOpenFactor)}px #ffd700`;
+                    statusEl.style.color = "#ffd700";
                 }
+
             } else {
+                // If hand lost, slowly drift to scatter
+                handOpenFactor = handOpenFactor * 0.95 + 1.0 * 0.05; 
                 targetRotY = 0;
                 statusEl.innerText = "WAVE HAND";
             }
-        }
-
-        function setShape(shape) {
-            currentState = shape;
-            if (shape === 'SATURN') generateSaturnTargets();
-            else generateScatterTargets();
         }
 
         const hands = new Hands({locateFile: (file) => {
