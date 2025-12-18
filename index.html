@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Golden Hand Controller</title>
+    <title>Pitch Black Golden Controller</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            /* Background ko thoda light kiya hai (Radial Gradient) taaki particles pop karein */
-            background: radial-gradient(circle at center, #1a0b2e 0%, #000000 90%);
+            /* Wapas Pure Black Background */
+            background-color: #000000;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
@@ -32,8 +32,7 @@
             border: 2px solid rgba(255, 215, 0, 0.5);
             z-index: 2;
             transform: scaleX(-1);
-            opacity: 0.7;
-            box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+            opacity: 0.5; /* Thoda transparent taaki distract na kare */
         }
 
         #status {
@@ -49,9 +48,10 @@
             z-index: 10;
             text-align: center;
             text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.5);
             padding: 10px 30px;
             border-radius: 30px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
             pointer-events: none;
         }
 
@@ -83,7 +83,7 @@
 </head>
 <body>
 
-    <div id="loading">Initializing Golden System...</div>
+    <div id="loading">Initialising Golden Core...</div>
     <div id="status">Raise Your Hand</div>
     
     <video class="input_video"></video>
@@ -92,30 +92,28 @@
     <script>
         // --- CONFIGURATION ---
         const PARTICLE_COUNT = 5500;
-        const PARTICLE_SIZE = 0.35;  // SIZE INCREASED (Pehle 0.12 tha)
+        const PARTICLE_SIZE = 0.35;  // Big Particles
         const SPHERE_RADIUS = 3.8;
         const RING_INNER_RADIUS = 5.5;
         const RING_OUTER_RADIUS = 10;
         const SCATTER_RADIUS = 35;
         
-        // --- COLORS (SUPER BRIGHT) ---
+        // --- COLORS (ALWAYS GOLD) ---
         const COLOR_GOLD_BRIGHT = new THREE.Color(0xffd700); 
-        const COLOR_GOLD_WHITE = new THREE.Color(0xffffee);
-        const COLOR_GOLD_ORANGE = new THREE.Color(0xffaa00);
-
+        const COLOR_GOLD_DEEP = new THREE.Color(0xffaa00);
+        
         // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
-        // Fog hata diya ya bohot kam kar diya taaki brightness kam na ho
-        scene.fog = new THREE.FogExp2(0x1a0b2e, 0.005); 
+        // Fog bhi pure black
+        scene.fog = new THREE.FogExp2(0x000000, 0.005); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // CAMERA ADJUSTMENT: Z kam kiya, Y zero kiya for Center View
+        // Positioned Center Front
         camera.position.set(0, 0, 22); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio); // Sharpness ke liye
+        renderer.setPixelRatio(window.devicePixelRatio); 
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
         // --- PARTICLE SYSTEM ---
@@ -123,7 +121,6 @@
         const positions = new Float32Array(PARTICLE_COUNT * 3);
         const colors = new Float32Array(PARTICLE_COUNT * 3);
         const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
-        const sizes = new Float32Array(PARTICLE_COUNT); // Individual sizes for sparkle
         
         for (let i = 0; i < PARTICLE_COUNT; i++) {
             positions[i * 3] = (Math.random() - 0.5) * 60;
@@ -133,18 +130,12 @@
             colors[i * 3] = COLOR_GOLD_BRIGHT.r;
             colors[i * 3 + 1] = COLOR_GOLD_BRIGHT.g;
             colors[i * 3 + 2] = COLOR_GOLD_BRIGHT.b;
-
-            // Varied sizes for depth
-            sizes[i] = Math.random(); 
         }
 
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        // We will just use uniform size in material for performance, but vary opacity visually
 
-        // Better texture for "Glow"
         const textureLoader = new THREE.TextureLoader();
-        // Using 'spark1.png' which is a standard glow sprite
         const sprite = textureLoader.load('https://threejs.org/examples/textures/sprites/spark1.png');
 
         const material = new THREE.PointsMaterial({
@@ -152,16 +143,13 @@
             map: sprite,
             vertexColors: true,
             transparent: true,
-            opacity: 1.0, // Full opacity
-            blending: THREE.AdditiveBlending, // Super bright overlap
+            opacity: 1.0,
+            blending: THREE.AdditiveBlending,
             depthWrite: false
         });
 
         const particles = new THREE.Points(geometry, material);
-        
-        // INITIAL POSITION SHIFT: Sphere ko thoda upar shift karte hain
-        particles.position.y = 2; 
-
+        particles.position.y = 2; // Center offset
         scene.add(particles);
 
         // --- SHAPE GENERATION ---
@@ -182,26 +170,21 @@
                     tx = SPHERE_RADIUS * Math.sin(phi) * Math.cos(theta);
                     ty = SPHERE_RADIUS * Math.sin(phi) * Math.sin(theta);
                     tz = SPHERE_RADIUS * Math.cos(phi);
-                    col = COLOR_GOLD_ORANGE; 
+                    col = COLOR_GOLD_DEEP; // Thoda deep gold core ke liye
                 } else {
                     // RING
                     const angle = Math.random() * Math.PI * 2;
                     const radius = RING_INNER_RADIUS + Math.random() * (RING_OUTER_RADIUS - RING_INNER_RADIUS);
                     
-                    // RING ANGLE ADJUSTMENT: Flatten it so it faces camera better
-                    // Pehle X-Z plane pe tha, ab thoda tilt karte hain camera ki taraf
                     const xBase = Math.cos(angle) * radius;
                     const zBase = Math.sin(angle) * radius;
                     
-                    // Tilt logic (X axis rotation)
-                    // Tilt of 25 degrees looks majestic from front
+                    // Tilt for 3D look
                     const tilt = Math.PI * 0.15; 
 
                     tx = xBase;
                     ty = zBase * Math.sin(tilt);
                     tz = zBase * Math.cos(tilt);
-
-                    // Add slight thickness to ring
                     ty += (Math.random() - 0.5) * 0.3;
 
                     col = COLOR_GOLD_BRIGHT;
@@ -230,10 +213,10 @@
                 targetPositions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
                 targetPositions[i3 + 2] = r * Math.cos(phi);
                 
-                // Scatter colors -> White Gold
-                colors[i3] = COLOR_GOLD_WHITE.r;
-                colors[i3+1] = COLOR_GOLD_WHITE.g;
-                colors[i3+2] = COLOR_GOLD_WHITE.b;
+                // CHANGE: Ab ye White nahi, balki Bright Gold rahenge
+                colors[i3] = COLOR_GOLD_BRIGHT.r;
+                colors[i3+1] = COLOR_GOLD_BRIGHT.g;
+                colors[i3+2] = COLOR_GOLD_BRIGHT.b;
             }
             geometry.attributes.color.needsUpdate = true;
         }
@@ -242,11 +225,10 @@
         let currentState = 'SCATTER';
         generateScatterTargets();
 
-        // Control Variables
         let targetRotX = 0;
         let targetRotY = 0;
         let targetPosX = 0;
-        let targetPosY = 2; // Default thoda upar
+        let targetPosY = 2;
 
         // --- ANIMATION LOOP ---
         const clock = new THREE.Clock();
@@ -255,45 +237,32 @@
             requestAnimationFrame(animate);
             const time = clock.getElapsedTime();
             
-            // 1. Hand Follow Logic (Smooth)
-            // Sphere rotation (Globe spinning effect)
+            // Hand Follow Logic
             particles.rotation.x += (targetRotX - particles.rotation.x) * 0.08;
             particles.rotation.y += (targetRotY - particles.rotation.y) * 0.08;
-            
-            // Sphere Position (Moving left/right/up/down)
             particles.position.x += (targetPosX - particles.position.x) * 0.08;
             particles.position.y += (targetPosY - particles.position.y) * 0.08;
 
-            // 2. Particle Physics
             const positionAttribute = geometry.attributes.position;
             
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 const i3 = i * 3;
 
-                // Move towards target shape
-                // Using 0.1 speed for snappier feel
+                // Move towards target
                 positions[i3]     += (targetPositions[i3] - positions[i3]) * 0.1;
                 positions[i3 + 1] += (targetPositions[i3 + 1] - positions[i3 + 1]) * 0.1;
                 positions[i3 + 2] += (targetPositions[i3 + 2] - positions[i3 + 2]) * 0.1;
 
-                // Alive Effect: Constant subtle motion
+                // Alive Effect
                 if (currentState === 'SATURN') {
-                    // Ring Spin Simulation (Math Trick: just wobble based on angle)
-                    if (Math.abs(positions[i3+1]) < 2) { // Ring particles check roughly
-                        // Simple jitter for sparkle
+                    if (Math.abs(positions[i3+1]) < 2) { 
                          positions[i3] += (Math.random() - 0.5) * 0.05;
                     }
                 } else {
-                    // Floating scatter
                     positions[i3+1] += Math.sin(time * 2 + positions[i3]) * 0.02;
                 }
             }
             positionAttribute.needsUpdate = true;
-
-            // Auto Rotation if Saturn
-            if (currentState === 'SATURN') {
-                // particles.rotation.y += 0.002; // Slow auto spin on top of hand spin
-            }
 
             renderer.render(scene, camera);
         }
@@ -311,28 +280,19 @@
                 const landmarks = results.multiHandLandmarks[0];
                 const wrist = landmarks[0];
 
-                // --- POSITION MAPPING ---
-                // X: Invert (mirror) and scale
-                // 0.5 is center. 
+                // Mapping
                 const x = (0.5 - wrist.x) * 30; 
-                
-                // Y: Invert (0 is top in MediaPipe, +Y is top in Three.js)
-                // Offset +2 to keep it slightly upper screen by default
                 const y = (0.5 - wrist.y) * 20 + 2; 
 
                 targetPosX = x;
                 targetPosY = y;
                 
-                // --- ROTATION MAPPING ---
-                // Hand move left -> Spin left
                 targetRotY = x * 0.15; 
-                targetRotX = (y - 2) * -0.15; // Pivot around the visual center
+                targetRotX = (y - 2) * -0.15;
 
-                // --- GESTURE DETECTION (FIST vs OPEN) ---
+                // Fist Detection
                 const tips = [8, 12, 16, 20];
                 let avgDist = 0;
-                
-                // Distance from Wrist
                 tips.forEach(tipIndex => {
                     const tip = landmarks[tipIndex];
                     const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
@@ -340,24 +300,22 @@
                 });
                 avgDist = avgDist / tips.length;
 
-                // Threshold
-                if (avgDist < 0.25) { // Fist
+                if (avgDist < 0.25) { 
                     if(currentState !== 'SATURN') {
                         setShape('SATURN');
-                        statusEl.innerText = "POWER: 100%";
-                        statusEl.style.color = "#fff";
+                        statusEl.innerText = "GOLDEN CORE LOCKED";
+                        statusEl.style.textShadow = "0 0 20px #ffd700";
                     }
-                } else { // Open
+                } else { 
                     if(currentState !== 'SCATTER') {
                         setShape('SCATTER');
                         statusEl.innerText = "DISPERSED";
-                        statusEl.style.color = "#aaa";
+                        statusEl.style.textShadow = "none";
                     }
                 }
             } else {
-                // No Hand: Center and scatter
                 targetPosX = 0;
-                targetPosY = 2; // Return to slightly upper center
+                targetPosY = 2;
                 targetRotX = 0;
                 targetRotY = 0;
                 statusEl.innerText = "WAVE HAND";
