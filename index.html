@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stable Golden Spin</title>
+    <title>Golden Spin (No Tilt)</title>
     <style>
         body {
             margin: 0;
@@ -176,7 +176,7 @@
                     const xBase = Math.cos(angle) * radius;
                     const zBase = Math.sin(angle) * radius;
                     
-                    // FIXED: Ring ka apna ek permanent tilt hai taki wo flat na dikhe
+                    // Fixed tilt for Ring visual
                     const tilt = Math.PI * 0.15; 
 
                     tx = xBase;
@@ -220,7 +220,6 @@
         let currentState = 'SCATTER';
         generateScatterTargets();
 
-        let targetRotX = 0;
         let targetRotY = 0;
 
         // --- ANIMATION LOOP ---
@@ -231,12 +230,11 @@
             const time = clock.getElapsedTime();
             
             // --- 1. ROTATION LOGIC ---
-            // Y Rotation (Left/Right Spin) is strong
+            // Only Y Rotation (Left/Right Spin) is active
             particles.rotation.y += (targetRotY - particles.rotation.y) * 0.08;
             
-            // X Rotation (Tilt) is now VERY subtle/stable
-            // We use a smaller interpolation factor (0.05) and clamped values
-            particles.rotation.x += (targetRotX - particles.rotation.x) * 0.05;
+            // X Rotation (Tilt) is LOCKED at 0. No movement.
+            particles.rotation.x = 0;
 
             const positionAttribute = geometry.attributes.position;
             
@@ -275,15 +273,12 @@
                 const landmarks = results.multiHandLandmarks[0];
                 const wrist = landmarks[0];
 
-                // --- ROTATION MAPPING (FIXED) ---
+                // --- ROTATION MAPPING ---
                 // Left/Right Spin:
                 targetRotY = (wrist.x - 0.5) * 5; 
                 
-                // Up/Down Tilt: 
-                // Pehle ye factor 4 tha, ab maine isse 1 kar diya hai.
-                // Iska matlab agar haath thoda upar/neeche hai, to sphere jyada tilt nahi hoga.
-                targetRotX = (wrist.y - 0.5) * 1.0; 
-
+                // Tilt logic removed completely. 
+                
                 // Fist Detection
                 const tips = [8, 12, 16, 20];
                 let avgDist = 0;
@@ -308,7 +303,6 @@
                     }
                 }
             } else {
-                targetRotX = 0;
                 targetRotY = 0;
                 statusEl.innerText = "WAVE HAND";
             }
