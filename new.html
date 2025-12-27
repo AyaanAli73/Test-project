@@ -1,371 +1,566 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cinematic Golden Controller</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #000000;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        #canvas-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
-
-        .input_video {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 160px;
-            height: 120px;
-            border-radius: 12px;
-            border: 2px solid rgba(255, 165, 0, 0.5); /* Orange Border */
-            z-index: 2;
-            transform: scaleX(-1);
-            opacity: 0.4;
-            transition: opacity 0.3s;
-        }
-        .input_video:hover { opacity: 1; }
-
-        #status {
-            position: absolute;
-            top: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: #ffd700;
-            font-size: 20px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 4px;
-            z-index: 10;
-            text-align: center;
-            text-shadow: 0 0 15px rgba(255, 165, 0, 0.8);
-            background: rgba(0, 0, 0, 0.6);
-            padding: 12px 35px;
-            border-radius: 40px;
-            border: 1px solid rgba(255, 215, 0, 0.2);
-            backdrop-filter: blur(4px);
-            pointer-events: none;
-        }
-
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #ffd700;
-            font-size: 24px;
-            z-index: 20;
-            font-family: monospace;
-            text-shadow: 0 0 20px #ffaa00;
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0% { opacity: 0.5; transform: translate(-50%, -50%) scale(0.98); }
-            100% { opacity: 1; transform: translate(-50%, -50%) scale(1.02); }
-        }
-    </style>
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- MediaPipe Hands -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-</head>
-<body>
-
-    <div id="loading">Charging Particle Core...</div>
-    <div id="status">System Ready</div>
+    <title>NexTrade Pro | Institutional Paper Trading</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <video class="input_video"></video>
-    <div id="canvas-container"></div>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            dark: '#05070a',
+                            card: 'rgba(15, 18, 26, 0.7)',
+                            accent: '#2dd4bf',
+                            purple: '#8b5cf6',
+                            buy: '#10b981',
+                            sell: '#ef4444'
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'marquee': 'marquee 30s linear infinite',
+                        'slide-up': 'slideUp 0.3s ease-out forwards',
+                    },
+                    keyframes: {
+                        marquee: {
+                            '0%': { transform: 'translateX(0%)' },
+                            '100%': { transform: 'translateX(-50%)' }
+                        },
+                        slideUp: {
+                            '0%': { transform: 'translateY(100%)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/css">
+        .glass { background: rgba(15, 18, 26, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .gradient-text { background: linear-gradient(135deg, #2dd4bf 0%, #8b5cf6 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .aurora-bg { background: radial-gradient(circle at 50% -20%, #1e1b4b 0%, #05070a 60%); }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #05070a; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        .view-transition { transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        #chart-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 10; }
+        .trade-input:focus { border-color: #2dd4bf; box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.2); }
+    </style>
+</head>
+<body class="bg-brand-dark text-slate-200 antialiased overflow-x-hidden">
+
+    <!-- TOAST NOTIFICATIONS CONTAINER -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none"></div>
+
+    <!-- NAVIGATION BAR -->
+    <nav class="fixed top-0 w-full z-50 glass">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2 cursor-pointer" onclick="showLanding()">
+                <div class="w-8 h-8 bg-gradient-to-br from-brand-accent to-brand-purple rounded-lg flex items-center justify-center shadow-lg shadow-brand-accent/20">
+                    <i data-lucide="blocks" class="text-white w-5 h-5"></i>
+                </div>
+                <span class="text-xl font-extrabold tracking-tight uppercase">Nex<span class="text-brand-accent">Trade</span></span>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
+                <a href="#features" class="hover:text-brand-accent transition-colors">Features</a>
+                <a href="#markets" class="hover:text-brand-accent transition-colors">Markets</a>
+            </div>
+            <div class="flex items-center gap-4">
+                <button class="px-5 py-2 text-sm font-semibold hover:text-brand-accent transition-colors" onclick="enterApp()">Login</button>
+                <button class="px-6 py-2 text-sm font-bold bg-white text-black rounded-full hover:bg-brand-accent transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-white/10" onclick="enterApp()">Get Started</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- LANDING PAGE -->
+    <div id="landing-view" class="view-transition pt-16">
+        <section class="aurora-bg relative overflow-hidden px-4 pt-24 pb-32">
+            <div class="max-w-7xl mx-auto text-center relative z-10">
+                <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-xs font-bold mb-8">
+                    <span class="relative flex h-2 w-2">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-accent opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-brand-accent"></span>
+                    </span>
+                    REAL-TIME MARKET SIMULATION ACTIVE
+                </div>
+                <h1 class="text-6xl md:text-8xl font-black mb-8 tracking-tighter leading-none">
+                    Trade the <span class="gradient-text">Future</span> <br>of Assets.
+                </h1>
+                <p class="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto mb-12 leading-relaxed">
+                    Institutional-grade paper trading platform. Experience high-frequency price action with zero financial risk.
+                </p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-5">
+                    <button onclick="enterApp()" class="w-full sm:w-auto px-12 py-5 bg-gradient-to-r from-brand-accent to-brand-purple text-white font-black rounded-2xl shadow-2xl shadow-brand-accent/30 hover:opacity-90 transition-all transform active:scale-95">
+                        Launch Dashboard
+                    </button>
+                    <button class="w-full sm:w-auto px-12 py-5 glass text-white font-bold rounded-2xl hover:bg-white/5 transition-all">
+                        Documentation
+                    </button>
+                </div>
+            </div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] bg-brand-accent/5 rounded-full blur-[140px] -z-0"></div>
+        </section>
+
+        <!-- TICKER -->
+        <div id="markets" class="border-y border-white/5 py-8 overflow-hidden bg-black/40">
+            <div class="flex animate-marquee whitespace-nowrap gap-16 items-center" id="ticker-content"></div>
+        </div>
+
+        <section id="features" class="max-w-7xl mx-auto px-4 py-32">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="glass p-10 rounded-[2.5rem] md:col-span-2 relative group overflow-hidden border-white/5">
+                    <div class="relative z-10">
+                        <i data-lucide="zap" class="text-brand-accent mb-8 w-12 h-12"></i>
+                        <h3 class="text-3xl font-black mb-4">Ultra-Fast Execution</h3>
+                        <p class="text-slate-400 text-lg">Our proprietary engine simulates institutional order matching with sub-5ms latency for professional strategy testing.</p>
+                    </div>
+                </div>
+                <div class="glass p-10 rounded-[2.5rem] border-white/5 flex flex-col justify-between">
+                    <div>
+                        <i data-lucide="shield-check" class="text-brand-purple mb-8 w-12 h-12"></i>
+                        <h3 class="text-2xl font-black mb-4">Paper Security</h3>
+                        <p class="text-slate-400">Local encryption keeps your virtual portfolio private and secure.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- TRADING APP VIEW -->
+    <div id="app-view" class="hidden view-transition opacity-0 bg-brand-dark min-h-screen flex flex-col">
+        <!-- Sub-Header -->
+        <div class="h-16 border-b border-white/5 glass flex items-center px-6 justify-between mt-16 overflow-x-auto whitespace-nowrap shrink-0">
+            <div class="flex items-center gap-8">
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-0.5">Asset</span>
+                    <span id="active-symbol" class="text-sm font-black tracking-tight">BTC / USDT</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-0.5">Price</span>
+                    <span id="live-price" class="text-sm font-mono font-bold text-brand-buy">0.00</span>
+                </div>
+                <div class="hidden sm:flex flex-col">
+                    <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-0.5">Simulation</span>
+                    <span class="text-[10px] px-2 py-0.5 bg-brand-accent/10 text-brand-accent rounded-full border border-brand-accent/20">STABLE</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="text-right">
+                    <span class="text-[10px] text-slate-500 font-black uppercase tracking-widest block mb-0.5">Portfolio</span>
+                    <span id="wallet-display" class="text-sm font-black text-brand-accent">10,000.00 USDT</span>
+                </div>
+                <button class="bg-brand-accent/10 text-brand-accent p-2.5 rounded-xl hover:bg-brand-accent hover:text-black transition-all" title="Exit to Home" onclick="showLanding()">
+                    <i data-lucide="log-out" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col lg:flex-row overflow-hidden h-full">
+            <!-- Asset Sidebar -->
+            <div class="w-full lg:w-72 border-r border-white/5 flex flex-col glass lg:h-full order-3 lg:order-1 overflow-y-auto shrink-0">
+                <div class="p-4 border-b border-white/5 font-black text-[10px] uppercase tracking-[0.2em] text-slate-500 sticky top-0 bg-brand-dark/95 z-10 backdrop-blur-md">Markets</div>
+                <div class="flex-1" id="asset-list"></div>
+            </div>
+
+            <!-- Main Content: Chart & History -->
+            <div class="flex-1 flex flex-col border-r border-white/5 order-1 lg:order-2 overflow-hidden">
+                <div class="flex-1 relative overflow-hidden bg-black/60 min-h-[400px] lg:min-h-0" id="chart-parent">
+                    <div id="chart-container"></div>
+                    <!-- Chart Syncing State -->
+                    <div id="chart-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-brand-dark/90 z-20 transition-opacity duration-700">
+                        <div class="w-10 h-10 border-2 border-brand-accent/20 border-t-brand-accent rounded-full animate-spin mb-4"></div>
+                        <span class="text-[10px] font-black tracking-[0.3em] text-brand-accent uppercase">Calibrating Chart Engine</span>
+                    </div>
+                </div>
+                <!-- Trade History -->
+                <div class="h-48 lg:h-64 border-t border-white/5 glass flex flex-col shrink-0 overflow-hidden">
+                    <div class="px-6 py-3 border-b border-white/5 flex justify-between items-center bg-black/20">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Execution Log</span>
+                        <span id="trade-count" class="text-[10px] text-slate-500">0 Trades</span>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6 scroll-smooth">
+                        <table class="w-full text-left text-[11px] uppercase">
+                            <thead><tr class="text-slate-500 font-black"><th class="pb-3">Time</th><th class="pb-3">Asset</th><th class="pb-3">Side</th><th class="pb-3">Price</th><th class="pb-3">Qty</th></tr></thead>
+                            <tbody id="trade-history-body" class="text-slate-200 font-medium"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execution Panel -->
+            <div class="w-full lg:w-80 p-6 glass flex flex-col gap-6 order-2 lg:order-3 overflow-y-auto shrink-0">
+                <div class="flex gap-2 p-1 bg-black/40 rounded-2xl border border-white/5">
+                    <button id="btn-buy-mode" onclick="setMode('buy')" class="flex-1 py-3.5 rounded-xl font-black text-xs transition-all bg-brand-buy text-white shadow-lg shadow-brand-buy/20">BUY</button>
+                    <button id="btn-sell-mode" onclick="setMode('sell')" class="flex-1 py-3.5 rounded-xl font-black text-xs transition-all text-slate-500 hover:text-white">SELL</button>
+                </div>
+                <div class="space-y-5">
+                    <div class="space-y-2.5">
+                        <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Limit Price (USDT)</label>
+                        <input type="number" id="trade-price" class="trade-input w-full bg-black/60 border border-white/5 rounded-2xl p-4 text-right font-mono font-bold text-lg outline-none transition-all">
+                    </div>
+                    <div class="space-y-2.5">
+                        <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Order Amount (<span id="asset-unit">BTC</span>)</label>
+                        <input type="number" id="trade-amount" class="trade-input w-full bg-black/60 border border-white/5 rounded-2xl p-4 text-right font-mono font-bold text-lg outline-none transition-all" placeholder="0.00" step="0.0001">
+                    </div>
+                    <div class="p-4 bg-white/5 rounded-2xl border border-white/5 space-y-1">
+                        <span class="text-[10px] font-black text-slate-500 uppercase block">Available Balance</span>
+                        <span id="asset-balance" class="text-sm font-black text-slate-100">0.00</span>
+                    </div>
+                    <button id="action-btn" onclick="executeTrade()" class="w-full py-5 bg-brand-buy text-white font-black rounded-2xl shadow-xl shadow-brand-buy/20 hover:opacity-90 transform active:scale-95 transition-all text-sm tracking-widest">PLACE ORDER</button>
+                </div>
+                <div class="mt-4 pt-6 border-t border-white/5">
+                    <h4 class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-5">Current Holdings</h4>
+                    <div id="portfolio-summary" class="space-y-3.5"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // --- CONFIGURATION ---
-        const PARTICLE_COUNT = 7000; // Increased count for density
-        const PARTICLE_SIZE = 0.28;
-        const SPHERE_RADIUS = 3.8;
-        const RING_INNER_RADIUS = 5.5;
-        const RING_OUTER_RADIUS = 10.5;
-        const SCATTER_RADIUS = 45; 
-        
-        // --- COLORS (Dynamic) ---
-        // Burning Gold (Compressed)
-        const COL_HOT_R = 1.0, COL_HOT_G = 0.6, COL_HOT_B = 0.0; 
-        // Cool White/Pale Gold (Expanded)
-        const COL_COLD_R = 0.9, COL_COLD_G = 0.9, COL_COLD_B = 1.0;
+        // Data Store
+        const markets = [
+            { id: 'BTC', name: 'Bitcoin', price: 92450.25, change: +2.45 },
+            { id: 'ETH', name: 'Ethereum', price: 3412.80, change: -1.20 },
+            { id: 'SOL', name: 'Solana', price: 184.22, change: +8.31 },
+            { id: 'XRP', name: 'Ripple', price: 1.22, change: +0.45 },
+            { id: 'ADA', name: 'Cardano', price: 0.84, change: -2.10 },
+            { id: 'DOT', name: 'Polkadot', price: 6.72, change: +1.15 }
+        ];
 
-        // --- THREE.JS SETUP ---
-        const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x000000, 0.002); 
+        let state = {
+            activeAsset: 'BTC',
+            mode: 'buy',
+            usdt: 10000.00,
+            portfolio: { BTC: 0, ETH: 0, SOL: 0, XRP: 0, ADA: 0, DOT: 0 },
+            history: [],
+            lastUpdateTime: 0,
+            isPriceInputFocused: false
+        };
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 3, 22); 
-        camera.lookAt(0, 0, 0);
+        let chart = null, candleSeries = null;
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
-        document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-        // --- 1. BACKGROUND STARS (NEW) ---
-        const starGeo = new THREE.BufferGeometry();
-        const starCount = 2000;
-        const starPos = new Float32Array(starCount * 3);
-        for(let i=0; i<starCount * 3; i++) {
-            starPos[i] = (Math.random() - 0.5) * 200; // Wide field
-        }
-        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-        const starMat = new THREE.PointsMaterial({color: 0x555555, size: 0.1});
-        const stars = new THREE.Points(starGeo, starMat);
-        scene.add(stars);
-
-        // --- 2. MAIN PARTICLE SYSTEM ---
-        const geometry = new THREE.BufferGeometry();
-        
-        const positions = new Float32Array(PARTICLE_COUNT * 3);
-        const saturnPositions = new Float32Array(PARTICLE_COUNT * 3);
-        const scatterPositions = new Float32Array(PARTICLE_COUNT * 3);
-        const colors = new Float32Array(PARTICLE_COUNT * 3);
-        const opacities = new Float32Array(PARTICLE_COUNT); // For flickering
-
-        // PRE-CALCULATE SHAPES
-        for (let i = 0; i < PARTICLE_COUNT; i++) {
-            const i3 = i * 3;
-
-            // --- SATURN SHAPE ---
-            let tx, ty, tz;
-            if (Math.random() > 0.4) {
-                // Sphere
-                const u = Math.random();
-                const v = Math.random();
-                const theta = 2 * Math.PI * u;
-                const phi = Math.acos(2 * v - 1);
-                tx = SPHERE_RADIUS * Math.sin(phi) * Math.cos(theta);
-                ty = SPHERE_RADIUS * Math.sin(phi) * Math.sin(theta);
-                tz = SPHERE_RADIUS * Math.cos(phi);
-            } else {
-                // Ring (Flat)
-                const angle = Math.random() * Math.PI * 2;
-                const radius = RING_INNER_RADIUS + Math.random() * (RING_OUTER_RADIUS - RING_INNER_RADIUS);
-                tx = Math.cos(angle) * radius;
-                ty = (Math.random() - 0.5) * 0.2;
-                tz = Math.sin(angle) * radius;
-            }
-            saturnPositions[i3] = tx;
-            saturnPositions[i3+1] = ty;
-            saturnPositions[i3+2] = tz;
-
-            // --- SCATTER SHAPE ---
-            const r = Math.random() * SCATTER_RADIUS + 5;
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.acos((Math.random() * 2) - 1);
-            scatterPositions[i3] = r * Math.sin(phi) * Math.cos(theta);
-            scatterPositions[i3+1] = r * Math.sin(phi) * Math.sin(theta);
-            scatterPositions[i3+2] = r * Math.cos(phi);
-
-            // Init Position (Scatter)
-            positions[i3] = scatterPositions[i3];
-            positions[i3+1] = scatterPositions[i3+1];
-            positions[i3+2] = scatterPositions[i3+2];
-
-            // Init Color (White)
-            colors[i3] = COL_COLD_R;
-            colors[i3+1] = COL_COLD_G;
-            colors[i3+2] = COL_COLD_B;
+        // UI Helpers
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `p-4 rounded-2xl glass border-l-4 ${type === 'success' ? 'border-brand-buy' : 'border-brand-sell'} text-sm font-bold flex items-center gap-4 animate-slide-up shadow-2xl pointer-events-auto`;
+            toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="${type === 'success' ? 'text-brand-buy' : 'text-brand-sell'} w-5 h-5"></i> <span class="text-slate-100">${message}</span>`;
+            container.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => { toast.classList.add('opacity-0', 'duration-500'); setTimeout(() => toast.remove(), 500); }, 4000);
         }
 
-        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        // Navigation
+        function enterApp() {
+            window.scrollTo(0, 0);
+            document.getElementById('landing-view').classList.add('hidden');
+            const app = document.getElementById('app-view');
+            app.classList.remove('hidden');
+            setTimeout(() => {
+                app.classList.remove('opacity-0');
+                initApp();
+            }, 50);
+        }
 
-        const textureLoader = new THREE.TextureLoader();
-        const sprite = textureLoader.load('https://threejs.org/examples/textures/sprites/spark1.png');
+        function showLanding() {
+            document.getElementById('app-view').classList.add('hidden', 'opacity-0');
+            document.getElementById('landing-view').classList.remove('hidden');
+        }
 
-        const material = new THREE.PointsMaterial({
-            size: PARTICLE_SIZE,
-            map: sprite,
-            vertexColors: true,
-            transparent: true,
-            opacity: 1.0,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false
-        });
-
-        const particles = new THREE.Points(geometry, material);
-        scene.add(particles);
-
-        // --- LOGIC VARIABLES ---
-        let rawHandOpen = 1.0;
-        let smoothHandOpen = 1.0; // Smoothed value for butter animation
-        
-        let rawRotY = 0;
-        let smoothRotY = 0; // Smoothed rotation
-        
-        // --- ANIMATION ---
-        const clock = new THREE.Clock();
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const delta = clock.getDelta();
-            const time = clock.getElapsedTime();
-
-            // 1. SMOOTHING (INTERPOLATION) - "Butter Smooth"
-            // We move the smooth value 10% closer to raw value every frame
-            smoothHandOpen += (rawHandOpen - smoothHandOpen) * 0.08; 
-            smoothRotY += (rawRotY - smoothRotY) * 0.05; // Lower = heavier inertia
-
-            // 2. APPLY ROTATION
-            particles.rotation.y += (smoothRotY - particles.rotation.y) * 0.1;
+        // App Initialization
+        function initApp() {
+            if(chart) return; // Prevent double init
+            lucide.createIcons();
+            renderTicker();
+            renderMarkets();
+            updatePortfolioUI();
             
-            // Background Stars Rotation (Opposite direction for parallax)
-            stars.rotation.y = time * 0.02;
+            // Initial selection
+            selectAsset('BTC');
+            
+            // Price Input tracking
+            const priceInp = document.getElementById('trade-price');
+            priceInp.onfocus = () => state.isPriceInputFocused = true;
+            priceInp.onblur = () => state.isPriceInputFocused = false;
 
-            // 3. UPDATE PARTICLES
-            const posAttr = geometry.attributes.position;
-            const colAttr = geometry.attributes.color;
-
-            // Determine Target Color based on Open Factor
-            // If Closed (0) -> Hot Color. If Open (1) -> Cold Color.
-            const currR = COL_HOT_R * (1 - smoothHandOpen) + COL_COLD_R * smoothHandOpen;
-            const currG = COL_HOT_G * (1 - smoothHandOpen) + COL_COLD_G * smoothHandOpen;
-            const currB = COL_HOT_B * (1 - smoothHandOpen) + COL_COLD_B * smoothHandOpen;
-
-            for (let i = 0; i < PARTICLE_COUNT; i++) {
-                const i3 = i * 3;
-
-                // Position Mixing
-                const tx = saturnPositions[i3] * (1 - smoothHandOpen) + scatterPositions[i3] * smoothHandOpen;
-                const ty = saturnPositions[i3+1] * (1 - smoothHandOpen) + scatterPositions[i3+1] * smoothHandOpen;
-                const tz = saturnPositions[i3+2] * (1 - smoothHandOpen) + scatterPositions[i3+2] * smoothHandOpen;
-
-                // Move Logic
-                positions[i3] += (tx - positions[i3]) * 0.1;
-                positions[i3+1] += (ty - positions[i3+1]) * 0.1;
-                positions[i3+2] += (tz - positions[i3+2]) * 0.1;
-
-                // Dynamic Jitter (Only when compressed for "Burning" effect)
-                if (smoothHandOpen < 0.3) {
-                     if (Math.random() > 0.9) {
-                         positions[i3] += (Math.random() - 0.5) * 0.15;
-                         positions[i3+1] += (Math.random() - 0.5) * 0.15;
-                         positions[i3+2] += (Math.random() - 0.5) * 0.15;
-                     }
-                } 
-                // Floating when scattered
-                else {
-                    positions[i3+1] += Math.sin(time + positions[i3]) * 0.005;
-                }
-
-                // Color Update (Global mix)
-                colors[i3] = currR;
-                colors[i3+1] = currG;
-                colors[i3+2] = currB;
-            }
-
-            posAttr.needsUpdate = true;
-            colAttr.needsUpdate = true;
-
-            renderer.render(scene, camera);
+            // Chart needs valid height, wait a moment for CSS reflow
+            setTimeout(initChart, 400);
         }
 
-        animate();
+        function renderTicker() {
+            const container = document.getElementById('ticker-content');
+            if(!container) return;
+            const content = markets.map(m => `
+                <div class="flex items-center gap-3">
+                    <span class="font-black text-white text-sm tracking-tight">${m.id}/USDT</span>
+                    <span id="ticker-price-${m.id}" class="${m.change >= 0 ? 'text-brand-buy' : 'text-brand-sell'} font-mono font-bold">$${m.price.toLocaleString()}</span>
+                    <span class="text-[9px] font-black bg-white/5 border border-white/10 px-2 py-0.5 rounded text-slate-400">${m.change >= 0 ? '+' : ''}${m.change}%</span>
+                </div>
+            `).join('');
+            container.innerHTML = content + content;
+        }
 
-        // --- TRACKING ---
-        const videoElement = document.querySelector('.input_video');
-        const statusEl = document.getElementById('status');
-        
-        function onResults(results) {
-            document.getElementById('loading').style.display = 'none';
+        function renderMarkets() {
+            const list = document.getElementById('asset-list');
+            list.innerHTML = markets.map(m => `
+                <div onclick="selectAsset('${m.id}')" class="p-5 flex items-center justify-between border-b border-white/5 cursor-pointer hover:bg-white/5 transition-all ${m.id === state.activeAsset ? 'bg-white/10 border-l-2 border-brand-accent' : ''}">
+                    <div><div class="text-xs font-black tracking-tight">${m.id}/USDT</div><div class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">${m.name}</div></div>
+                    <div class="text-right"><div id="market-price-${m.id}" class="text-sm font-mono font-bold">$${m.price.toLocaleString()}</div><div class="text-[9px] font-black ${m.change >= 0 ? 'text-brand-buy' : 'text-brand-sell'}">${m.change >= 0 ? '+' : ''}${m.change}%</div></div>
+                </div>
+            `).join('');
+        }
 
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmarks = results.multiHandLandmarks[0];
-                const wrist = landmarks[0];
+        function selectAsset(id) {
+            state.activeAsset = id;
+            const m = markets.find(x => x.id === id);
+            
+            document.getElementById('active-symbol').innerText = `${id} / USDT`;
+            document.getElementById('asset-unit').innerText = id;
+            document.getElementById('trade-price').value = m.price.toFixed(2);
+            
+            renderMarkets();
+            setMode(state.mode);
+            
+            if(candleSeries) {
+                const history = generateHistory(m.price);
+                candleSeries.setData(history);
+                state.lastUpdateTime = history[history.length - 1].time;
+            }
+        }
 
-                // 1. SPIN (X coord)
-                // Multiplier 4 gives good control range
-                rawRotY = (wrist.x - 0.5) * 4;
+        function setMode(mode) {
+            state.mode = mode;
+            const bBtn = document.getElementById('btn-buy-mode');
+            const sBtn = document.getElementById('btn-sell-mode');
+            const actionBtn = document.getElementById('action-btn');
+            const assetBal = document.getElementById('asset-balance');
 
-                // 2. GESTURE (Distance avg)
-                const tips = [8, 12, 16, 20];
-                let avgDist = 0;
-                tips.forEach(i => {
-                    const d = Math.sqrt(Math.pow(landmarks[i].x - wrist.x, 2) + Math.pow(landmarks[i].y - wrist.y, 2));
-                    avgDist += d;
-                });
-                avgDist /= tips.length;
-
-                // Calibration
-                const minVal = 0.18; // Fist
-                const maxVal = 0.40; // Open
-                let factor = (avgDist - minVal) / (maxVal - minVal);
-                factor = Math.max(0, Math.min(1, factor)); // Clamp 0-1
-
-                rawHandOpen = factor;
-
-                // Status UI Update
-                if (rawHandOpen < 0.15) {
-                    statusEl.innerText = "CORE STABLE";
-                    statusEl.style.color = "#ffaa00"; // Orange
-                    statusEl.style.textShadow = "0 0 20px #ff0000";
-                } else if (rawHandOpen > 0.85) {
-                    statusEl.innerText = "DISPERSION";
-                    statusEl.style.color = "#aaddff"; // Blueish
-                    statusEl.style.textShadow = "0 0 10px #ffffff";
-                } else {
-                    statusEl.innerText = "CHARGING...";
-                    statusEl.style.color = "#ffd700";
-                    statusEl.style.textShadow = "none";
-                }
-
+            if (mode === 'buy') {
+                bBtn.className = "flex-1 py-3.5 rounded-xl font-black text-xs transition-all bg-brand-buy text-white shadow-lg shadow-brand-buy/20";
+                sBtn.className = "flex-1 py-3.5 rounded-xl font-black text-xs transition-all text-slate-500 hover:text-white";
+                actionBtn.className = "w-full py-5 bg-brand-buy text-white font-black rounded-2xl shadow-xl shadow-brand-buy/30 hover:opacity-90 transition-all transform active:scale-95 text-sm tracking-widest";
+                actionBtn.innerText = `PLACE BUY ORDER`;
+                assetBal.innerText = `${state.usdt.toLocaleString()} USDT`;
             } else {
-                // Default: Scatter if no hand
-                rawHandOpen = rawHandOpen * 0.95 + 1.0 * 0.05;
-                rawRotY = rawRotY * 0.95; // Return to center slowly
-                statusEl.innerText = "CONNECTING...";
-                statusEl.style.color = "#555";
+                sBtn.className = "flex-1 py-3.5 rounded-xl font-black text-xs transition-all bg-brand-sell text-white shadow-lg shadow-brand-sell/20";
+                bBtn.className = "flex-1 py-3.5 rounded-xl font-black text-xs transition-all text-slate-500 hover:text-white";
+                actionBtn.className = "w-full py-5 bg-brand-sell text-white font-black rounded-2xl shadow-xl shadow-brand-sell/30 hover:opacity-90 transition-all transform active:scale-95 text-sm tracking-widest";
+                actionBtn.innerText = `PLACE SELL ORDER`;
+                assetBal.innerText = `${state.portfolio[state.activeAsset].toFixed(4)} ${state.activeAsset}`;
             }
         }
 
-        const hands = new Hands({locateFile: (file) => {
-            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-        }});
+        function executeTrade() {
+            const price = parseFloat(document.getElementById('trade-price').value);
+            const amount = parseFloat(document.getElementById('trade-amount').value);
+            
+            if (!amount || amount <= 0) {
+                showToast("Please enter a valid quantity", "error");
+                return;
+            }
 
-        hands.setOptions({
-            maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
+            if (state.mode === 'buy') {
+                const cost = price * amount;
+                if (cost > state.usdt) {
+                    showToast("Insufficient USDT liquidity", "error");
+                    return;
+                }
+                state.usdt -= cost;
+                state.portfolio[state.activeAsset] += amount;
+                showToast(`Filled Buy Order: ${amount} ${state.activeAsset}`);
+            } else {
+                if (amount > state.portfolio[state.activeAsset]) {
+                    showToast(`Insufficient ${state.activeAsset} holdings`, "error");
+                    return;
+                }
+                state.usdt += (price * amount);
+                state.portfolio[state.activeAsset] -= amount;
+                showToast(`Filled Sell Order: ${amount} ${state.activeAsset}`);
+            }
 
-        hands.onResults(onResults);
+            // Log entry
+            state.history.unshift({
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                pair: `${state.activeAsset}/USDT`,
+                type: state.mode,
+                price: price.toFixed(2),
+                amount: amount.toFixed(4)
+            });
 
-        const cameraUtils = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({image: videoElement});
-            },
-            width: 640,
-            height: 480
-        });
+            updatePortfolioUI();
+            updateHistoryUI();
+            setMode(state.mode); // Refresh balance label
+            document.getElementById('trade-amount').value = '';
+        }
 
-        cameraUtils.start();
+        function updatePortfolioUI() {
+            document.getElementById('wallet-display').innerText = `${state.usdt.toLocaleString()} USDT`;
+            const summary = document.getElementById('portfolio-summary');
+            let html = `
+                <div class="flex justify-between items-center text-[11px]">
+                    <span class="text-slate-500 font-bold uppercase tracking-widest">Tether (USDT)</span>
+                    <span class="font-black text-slate-100">${state.usdt.toLocaleString()}</span>
+                </div>
+            `;
+            for (let id in state.portfolio) {
+                if (state.portfolio[id] > 0) {
+                    html += `
+                        <div class="flex justify-between items-center text-[11px]">
+                            <span class="text-slate-500 font-bold uppercase tracking-widest">${id}</span>
+                            <span class="font-black text-slate-100">${state.portfolio[id].toFixed(4)}</span>
+                        </div>
+                    `;
+                }
+            }
+            summary.innerHTML = html;
+        }
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        function updateHistoryUI() {
+            const body = document.getElementById('trade-history-body');
+            document.getElementById('trade-count').innerText = `${state.history.length} Trades`;
+            body.innerHTML = state.history.map(h => `
+                <tr class="border-b border-white/5 group hover:bg-white/5 transition-all">
+                    <td class="py-4 text-slate-500 text-[10px]">${h.time}</td>
+                    <td class="py-4 font-black text-xs">${h.pair}</td>
+                    <td class="py-4 ${h.type === 'buy' ? 'text-brand-buy' : 'text-brand-sell'} font-black text-[10px] tracking-widest">${h.type.toUpperCase()}</td>
+                    <td class="py-4 font-mono text-[11px] font-bold text-slate-300">$${h.price}</td>
+                    <td class="py-4 font-mono text-[11px] font-bold text-slate-300">${h.amount}</td>
+                </tr>
+            `).join('');
+        }
 
+        // Charting & Real-time Loop
+        function initChart() {
+            const container = document.getElementById('chart-container');
+            const parent = document.getElementById('chart-parent');
+            if(!container || !parent) return;
+
+            // Chart must have valid space
+            if (parent.clientHeight < 50) {
+                setTimeout(initChart, 200);
+                return;
+            }
+
+            chart = LightweightCharts.createChart(container, {
+                width: parent.clientWidth,
+                height: parent.clientHeight,
+                layout: { background: { color: 'transparent' }, textColor: '#64748b' },
+                grid: { vertLines: { color: 'rgba(255,255,255,0.02)' }, horzLines: { color: 'rgba(255,255,255,0.02)' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                timeScale: { borderColor: 'rgba(255,255,255,0.05)', timeVisible: true, secondsVisible: true },
+                rightPriceScale: { borderColor: 'rgba(255,255,255,0.05)' }
+            });
+
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#10b981', downColor: '#ef4444',
+                borderDownColor: '#ef4444', borderUpColor: '#10b981',
+                wickDownColor: '#ef4444', wickUpColor: '#10b981'
+            });
+
+            const asset = markets.find(m => m.id === state.activeAsset);
+            const history = generateHistory(asset.price);
+            candleSeries.setData(history);
+            state.lastUpdateTime = history[history.length - 1].time;
+
+            document.getElementById('chart-loading').style.opacity = '0';
+            setTimeout(() => document.getElementById('chart-loading').classList.add('hidden'), 700);
+
+            // Resize support
+            const ro = new ResizeObserver(() => {
+                if (chart && parent.clientWidth > 0) chart.resize(parent.clientWidth, parent.clientHeight);
+            });
+            ro.observe(parent);
+
+            startMarketPulse();
+        }
+
+        function generateHistory(startPrice) {
+            let data = [];
+            // Go back 500 minutes but end 1 minute ago to leave room for live updates
+            let time = Math.floor(Date.now() / 1000) - (500 * 60) - 60;
+            let current = startPrice;
+            for (let i = 0; i < 500; i++) {
+                let open = current;
+                let close = open + (Math.random() - 0.5) * (startPrice * 0.003);
+                let high = Math.max(open, close) + Math.random() * (startPrice * 0.001);
+                let low = Math.min(open, close) - Math.random() * (startPrice * 0.001);
+                data.push({ time, open, high, low, close });
+                time += 60; 
+                current = close;
+            }
+            return data;
+        }
+
+        function startMarketPulse() {
+            // Pulse every 500ms for high responsiveness
+            setInterval(() => {
+                const appVisible = !document.getElementById('app-view').classList.contains('hidden');
+                if(!appVisible) return;
+
+                // Update ALL markets in the data store for the ticker
+                markets.forEach(asset => {
+                    const volatility = asset.price * 0.0006;
+                    const change = (Math.random() - 0.495) * volatility;
+                    asset.price += change;
+                    
+                    // Update Ticker UI
+                    const tickEl = document.getElementById(`ticker-price-${asset.id}`);
+                    if(tickEl) {
+                        tickEl.innerText = `$${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    }
+
+                    // Update Side Market List
+                    const sideEl = document.getElementById(`market-price-${asset.id}`);
+                    if(sideEl) {
+                        sideEl.innerText = `$${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    }
+
+                    // Active Asset Logic
+                    if (asset.id === state.activeAsset) {
+                        const priceEl = document.getElementById('live-price');
+                        const priceInp = document.getElementById('trade-price');
+                        
+                        priceEl.innerText = asset.price.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                        priceEl.className = `text-sm font-mono font-bold ${change >= 0 ? 'text-brand-buy' : 'text-brand-sell'}`;
+
+                        // Auto-sync input price if user isn't typing
+                        if(!state.isPriceInputFocused) {
+                            priceInp.value = asset.price.toFixed(2);
+                        }
+
+                        // Update Chart Candle
+                        if(candleSeries) {
+                            const now = Math.floor(Date.now() / 1000);
+                            // Ensure the library always sees a forward-moving or identical timestamp
+                            const barTime = Math.max(now, state.lastUpdateTime);
+                            
+                            candleSeries.update({
+                                time: barTime,
+                                open: asset.price - change,
+                                high: asset.price + Math.abs(change),
+                                low: asset.price - Math.abs(change),
+                                close: asset.price
+                            });
+                            state.lastUpdateTime = barTime;
+                        }
+                    }
+                });
+            }, 500);
+        }
+
+        window.onload = () => lucide.createIcons();
     </script>
 </body>
 </html>
